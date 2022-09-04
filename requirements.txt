@@ -1,0 +1,2 @@
+pytiled-parser==2.2.0
+wasabigeom
