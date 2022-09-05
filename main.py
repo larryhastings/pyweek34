@@ -327,7 +327,7 @@ class Player:
         self.terminal_velocity = 100 # cells per second
         self.maximum_y = 19
 
-        self.controller = Controller()
+        self.controller = controller
         self._standing_on_count = 0
         self.on_ground = w2d.Event()
 
@@ -447,73 +447,10 @@ class Player:
         while True:
             await _jump_on_press()
             async with w2d.Nursery() as ns:
-                ns.do(_jump_on_press())
+                if self.on_ground.is_set():
+                    ns.do(_jump_on_press())
                 await self.on_ground
                 ns.cancel()
-
-    def on_tick(self):
-        dt = 1/60
-
-        speed_x, speed_y = self.speed
-        starting_speed_x = speed_x
-        starting_speed_y = speed_y
-        if speed_x != self.desired_x_speed:
-            before = speed_x < self.desired_x_speed
-            speed_x += self.x_acceleration * dt
-            after = speed_x < self.desired_x_speed
-            if before != after:
-                speed_x = self.desired_x_speed
-
-        speed_y += self.gravity * dt
-        if speed_y > self.terminal_velocity:
-            speed_y = self.terminal_velocity
-        # print(f"    speed_y changed by {self.gravity * dt}, is now {speed_y}")
-
-        if ((speed_x != starting_speed_x) or (speed_y != starting_speed_y)):
-            self.speed = vec2(speed_x, speed_y)
-
-        delta = self.speed * dt
-
-        # death plane
-        if (self.pos.y + delta.y) >= self.death_plane:
-            self.pos = current_checkpoint.pos
-            self.speed = vec2(0, 0)
-            delta = 0
-        else:
-            # lame second approximation for collision.
-            # instead of moving the character by "delta"
-            # all at once, move using a number of steps,
-            # at least two.
-            steps = int(max(delta.x, delta.y, 1) * 2)
-
-            new_pos = self.pos
-            delta_per_step = delta / steps
-            for _ in range(steps):
-                new_pos += delta_per_step
-
-                # lame first approximation for collision.
-                # if we end the tick sticking into a block,
-                # simply move the player up until they're
-                # resting on the block.
-
-                final_cell_x = int(new_pos.x)
-                final_cell_y = int(new_pos.y)
-                cell_below_y = final_cell_y + 1
-                cells = grid[final_cell_x][cell_below_y]
-
-                for cell in cells:
-                    if isinstance(cell, Block) and cell.is_solid():
-                        collision_below = True
-                        break
-                else:
-                    collision_below = False
-
-                if collision_below:
-                    self.jumps = player_max_jumps
-                    delta_per_step = vec2(delta_per_step.x, 0)
-                    self.speed = vec2(self.speed.x, 0)
-                    new_pos = vec2(new_pos.x, final_cell_y)
-            self.pos = new_pos
 
 
 async def drive_main_clock():
