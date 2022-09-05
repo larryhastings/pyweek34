@@ -155,18 +155,6 @@ def physical(
 scene_width = 80
 scene_height = 40
 
-cell_size = 20
-
-# cell = grid[x][y]
-# isinstance(cell, list)
-grid = []
-
-for _ in range(scene_width + 1):
-    row = []
-    grid.append(row)
-    for __ in range(scene_height + 1):
-        row.append([])
-
 
 color_tile_maps = {}
 for color, layer in color_to_layer.items():
@@ -205,7 +193,7 @@ current_checkpoint = None
 
 
 class Checkpoint(Block):
-    def __init__(self, inage, x, y=None, *, initial=False):
+    def __init__(self, image, x, y=None, *, initial=False):
         global current_checkpoint
         if (y is None) and isinstance(x, vec2):
             position = x
@@ -257,24 +245,13 @@ actions = {
     "toggle_purple",
     }
 
-level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
 
-assert len(level.tilesets) == 1
-for value in level.tilesets.values():
-    tileset = value
-    break
-
-
-# expressed in cells
-scene_width, scene_height = level.map_size
-
-assert tileset.tile_width == tileset.tile_height
-cell_size = tileset.tile_width
+cell_size = TILE_SIZE
 
 background_tile_map = scene.layers[background_layer].add_tile_map()
 gray_tile_map = color_tile_maps['gray']
 
-scene = w2d.Scene(scene_width * cell_size, scene_height * cell_size)
+scene = w2d.Scene()
 scene.background = (0.9, 0.9, 0.9)
 
 
@@ -585,6 +562,7 @@ async def drive_main_clock():
 
 
 def init_level():
+    global grid, level
     # cell = grid[x][y]
     # isinstance(cell, list)
     grid = []
@@ -595,7 +573,12 @@ def init_level():
         for __ in range(scene_height + 1):
             row.append([])
 
+    level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
 
+    assert len(level.tilesets) == 1
+    for value in level.tilesets.values():
+        tileset = value
+        break
 
     for layer in level.layers:
         if layer.name == "Background":
@@ -630,21 +613,6 @@ def init_level():
                     block = BackgroundBlock(image, x, y)
 
     assert current_checkpoint, "no initial checkpoint set in map!"
-
-
-
-    # for x in range(10, 14):
-    #     Block('red', x, 20)
-
-        # for x in range(15, 19):
-        #     Block('red', x, 20)
-
-        # for x in range(21, 28):
-        #     Block('blue', x, 16)
-
-
-
-    # Checkpoint(11, 18, initial=True)
 
 
 async def pauser():
