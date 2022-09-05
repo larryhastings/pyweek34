@@ -1,13 +1,14 @@
 import bisect
 import collections
 import math
-import pygame
 
 import wasabi2d.loop
 from wasabi2d.clock import Clock
 import wasabi2d as w2d
 import wasabigeom
 vec2 = wasabigeom.vec2
+
+import pygame
 
 colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple'}
 
@@ -54,7 +55,7 @@ colored_block_tiles = {
 }
 
 
-class Block(Listener):
+class Block:
     def __init__(self, color, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
@@ -113,8 +114,10 @@ actions = {
 main_clock = Clock()
 game_clock = main_clock.create_sub_clock()
 
+class Game:
+    pass
 
-class Level(Listener):
+class Level:
     def __init__(self):
         self.color_state = {color: True for color in colors}
 
@@ -164,10 +167,6 @@ class Player:
             'move_right': 0,
             }
         self.momentary_actions_queue = collections.deque()
-        self.known_actions = set(self.key_to_action.values())
-        event_listeners.append(self)
-        game_clock.append(self)
-
 
     @property
     def pos(self):
@@ -176,31 +175,8 @@ class Player:
     @pos.setter
     def pos(self, v):
         self._pos = v
-        self.shape.pos = v * cell_size
-
-    def on_start_action(self, action):
-        if action in self.known_actions:
-            if action in self.stateful_actions:
-                self.stateful_actions[action] += 1
-            else:
-                self.momentary_actions_queue.append(action)
-            self.refresh_state()
-
-    def on_stop_action(self, action):
-        if action in self.known_actions:
-            if action in self.stateful_actions:
-                self.stateful_actions[action] -= 1
-            self.refresh_state()
-
-    def on_key_down(self, key):
-        action = self.key_to_action.get(key, None)
-        if action:
-            return self.on_start_action(action)
-
-    def on_key_up(self, key):
-        action = self.key_to_action.get(key, None)
-        if action:
-            return self.on_stop_action(action)
+        if self.shape:
+            self.shape.pos = v * cell_size
 
     def refresh_state(self):
         for name, value in self.stateful_actions.items():
@@ -228,20 +204,17 @@ class Player:
         self.speed = vec2(self.speed.x, y_speed)
         # print(f"{self.pos=} {self.speed=}")
 
-        if self.shape:  # FIXME: don't make this class stateful
-            self.shape.pos = v * cell_size
-
     async def handle_keys(self):
         key_to_action = {
-            w2d.keys.W: 'up',
-            w2d.keys.A: 'left',
-            w2d.keys.S: 'down',
-            w2d.keys.D: 'right',
+            w2d.keys.W: 'move_up',
+            w2d.keys.A: 'move_left',
+            w2d.keys.S: 'move_down',
+            w2d.keys.D: 'move_right',
 
-            w2d.keys.UP: 'up',
-            w2d.keys.DOWN: 'left',
-            w2d.keys.LEFT: 'down',
-            w2d.keys.RIGHT: 'right',
+            w2d.keys.UP: 'move_up',
+            w2d.keys.DOWN: 'move_left',
+            w2d.keys.LEFT: 'move_down',
+            w2d.keys.RIGHT: 'move_right',
 
             w2d.keys.SPACE: 'jump',
             w2d.keys.RETURN: 'shoot',
@@ -257,12 +230,19 @@ class Player:
             key = w2d.constants.keys(ev.key)
             if not (action := key_to_action.get(key)):
                 continue
+            print(f"{action=} {ev=}")
+            print()
             if ev.type == pygame.KEYDOWN:
-                self.actions[action] += 1
-                self.refresh_state()
+                if action in self.stateful_actions:
+                    print("state +", action, ev)
+                    self.stateful_actions[action] += 1
+                else:
+                    self.momentary_actions_queue.append(action)
             else:
-                self.actions[action] -= 1
-                self.refresh_state()
+                if action in self.stateful_actions:
+                    self.stateful_actions[action] -= 1
+            self.refresh_state()
+
 
     async def run(self):
         self.shape = scene.layers[sprite_layer].add_star(points=6, outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
@@ -403,9 +383,6 @@ for x in range(21, 28):
 
 Checkpoint(11, 18, initial=True)
 
-game = Game()
-level = Level()
-player = Player()
 
 async def pauser():
    while True:
@@ -420,6 +397,11 @@ async def pauser():
 
 
 async def main():
+    global game
+    global level
+    global player
+    game = Game()
+    level = Level()
     player = Player()
     player.pos = current_checkpoint.pos
 
