@@ -1,0 +1,3 @@
+[submodule "vendor/wasabi2d"]
+	path = vendor/wasabi2d
+	url = https://github.com/lordmauve/wasabi2d
