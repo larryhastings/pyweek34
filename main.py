@@ -1,22 +1,10 @@
 import bisect
 import collections
 import math
-import os
-from pathlib import Path
-import sys
+import pygame
 
-game_path = Path(sys.argv[0]).resolve().parent
-os.chdir(str(game_path))
-
-w2d_path = game_path.joinpath("w2d")
-if not w2d_path.exists():
-    os.system("git clone https://github.com/lordmauve/wasabi2d.git w2d")
-    os.chdir("w2d")
-    os.system("git checkout 38175c94531efc229c562e0721b9b50e80297401")
-    os.chdir("..")
-
-sys.path.insert(0, str(w2d_path))
-
+import wasabi2d.loop
+from wasabi2d.clock import Clock
 import wasabi2d as w2d
 import wasabigeom
 vec2 = wasabigeom.vec2
@@ -34,6 +22,7 @@ color_to_layer = {
     'blue': blue_layer,
     'purple': purple_layer,
 }
+
 
 scene = w2d.Scene()
 scene.background = (0.9, 0.9, 0.9)
@@ -65,19 +54,6 @@ colored_block_tiles = {
 }
 
 
-class Listener:
-    def on_key_down(self, key):
-        pass
-    def on_key_up(self, key):
-        pass
-    def on_pause(self):
-        pass
-    def on_unpause(self):
-        pass
-    def on_tick(self):
-        pass
-
-
 class Block(Listener):
     def __init__(self, color, x, y=None):
         if (y is None) and isinstance(x, vec2):
@@ -96,9 +72,11 @@ class Block(Listener):
     def is_solid(self):
         return level.color_state[self.color]
 
+
 current_checkpoint = None
 
-class Checkpoint(Listener):
+
+class Checkpoint:
     def __init__(self, x, y=None, *, initial=False):
         global current_checkpoint
         if (y is None) and isinstance(x, vec2):
@@ -110,7 +88,6 @@ class Checkpoint(Listener):
         if initial:
             current_checkpoint = self
 
-event_listeners = []
 
 actions = {
     "move_up",
@@ -120,7 +97,6 @@ actions = {
 
     "jump,"
     "shoot",
-
     "pause",
     "quit",
 
@@ -133,72 +109,9 @@ actions = {
     }
 
 
-class Clock(Listener):
-    def __init__(self, paused=False):
-        self.paused = paused
-        self.clocks = []
-
-    def append(self, clock):
-        self.clocks.append(clock)
-
-    def extend(self, iterable):
-        self.clocks.extend(iterable)
-
-    def on_tick(self):
-        if not self.paused:
-            for clock in self.clocks:
-                clock.on_tick()
 
 main_clock = Clock()
-
-game_clock = Clock()
-main_clock.clocks.append(game_clock)
-
-class Game(Listener):
-    def __init__(self):
-        self.key_to_action = {
-            w2d.keys.ESCAPE: 'pause',
-            w2d.keys.Q: 'quit',
-            }
-        event_listeners.append(self)
-
-    def on_start_action(self, action):
-        assert action in actions
-        if action == "quit":
-            sys.exit(0)
-            return True
-        if action == "pause":
-            game_clock.paused = not game_clock.paused
-            if game_clock.paused:
-                for listener in event_listeners:
-                    listener.on_pause()
-            else:
-                for listener in event_listeners:
-                    listener.on_unpause()
-
-    def on_stop_action(self, action):
-        pass
-
-    def on_key_down(self, key):
-        action = self.key_to_action.get(key, None)
-        if action:
-            return self.on_start_action(action)
-
-    def on_key_up(self, key):
-        action = self.key_to_action.get(key, None)
-        if action:
-            return self.on_stop_action(action)
-
-    def update(self, t, dt):
-        pass
-
-    def on_pause(self):
-        for layer in layers:
-            scene.layers[layer].set_effect('blur')
-
-    def on_unpause(self):
-        for layer in layers:
-            scene.layers[layer].clear_effect()
+game_clock = main_clock.create_sub_clock()
 
 
 class Level(Listener):
@@ -215,10 +128,10 @@ class Level(Listener):
 player_max_jumps = 2
 player_max_dashes = 1
 
-class Player(Listener):
-    def __init__(self):
-        self.shape = scene.layers[sprite_layer].add_star(points=6, outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
 
+class Player:
+    def __init__(self):
+        self.shape = None
         self._pos = None
         self.speed = vec2(0, 0)
         self.x_acceleration = 0
@@ -244,22 +157,6 @@ class Player(Listener):
         self.jumps = player_max_jumps
         self.dashes = player_max_dashes
 
-        self.key_to_action = {
-            w2d.keys.W: 'move_up',
-            w2d.keys.A: 'move_left',
-            w2d.keys.S: 'move_down',
-            w2d.keys.D: 'move_right',
-
-            w2d.keys.SPACE: 'jump',
-            w2d.keys.RETURN: 'shoot',
-
-            w2d.keys.K_1: "toggle_red",
-            w2d.keys.K_2: "toggle_orange",
-            w2d.keys.K_3: "toggle_yellow",
-            w2d.keys.K_4: "toggle_green",
-            w2d.keys.K_5: "toggle_blue",
-            w2d.keys.K_6: "toggle_purple",
-            }
         self.stateful_actions = {
             'move_up': 0,
             'move_left': 0,
@@ -270,6 +167,7 @@ class Player(Listener):
         self.known_actions = set(self.key_to_action.values())
         event_listeners.append(self)
         game_clock.append(self)
+
 
     @property
     def pos(self):
@@ -329,6 +227,53 @@ class Player(Listener):
 
         self.speed = vec2(self.speed.x, y_speed)
         # print(f"{self.pos=} {self.speed=}")
+
+        if self.shape:  # FIXME: don't make this class stateful
+            self.shape.pos = v * cell_size
+
+    async def handle_keys(self):
+        key_to_action = {
+            w2d.keys.W: 'up',
+            w2d.keys.A: 'left',
+            w2d.keys.S: 'down',
+            w2d.keys.D: 'right',
+
+            w2d.keys.UP: 'up',
+            w2d.keys.DOWN: 'left',
+            w2d.keys.LEFT: 'down',
+            w2d.keys.RIGHT: 'right',
+
+            w2d.keys.SPACE: 'jump',
+            w2d.keys.RETURN: 'shoot',
+
+            w2d.keys.K_1: "toggle_red",
+            w2d.keys.K_2: "toggle_orange",
+            w2d.keys.K_3: "toggle_yellow",
+            w2d.keys.K_4: "toggle_green",
+            w2d.keys.K_5: "toggle_blue",
+            w2d.keys.K_6: "toggle_purple",
+        }
+        async for ev in w2d.events.subscribe(pygame.KEYDOWN, pygame.KEYUP):
+            key = w2d.constants.keys(ev.key)
+            if not (action := key_to_action.get(key)):
+                continue
+            if ev.type == pygame.KEYDOWN:
+                self.actions[action] += 1
+                self.refresh_state()
+            else:
+                self.actions[action] -= 1
+                self.refresh_state()
+
+    async def run(self):
+        self.shape = scene.layers[sprite_layer].add_star(points=6, outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
+        with self.shape:
+            async with w2d.Nursery() as ns:
+                ns.do(self.run_physics())
+                ns.do(self.handle_keys())
+
+    async def run_physics(self):
+        async for _ in game_clock.coro.frames():
+            self.on_tick()
 
     def on_tick(self):
         dt = 1/60
@@ -400,40 +345,8 @@ class Player(Listener):
                     new_pos = vec2(new_pos.x, final_cell_y)
             self.pos = new_pos
 
-        # print(f"    update pos, {self.pos=}")
-        # print(f"    end    {self.pos=} {self.speed=}")
-        # print()
 
-        # print(f"{self.pos=}")
-
-
-
-@w2d.event
-def on_key_down(key):
-    for listener in event_listeners:
-        if listener.on_key_down(key):
-            break
-
-@w2d.event
-def on_key_up(key):
-    for listener in event_listeners:
-        if listener.on_key_up(key):
-            break
-
-
-tick_offsets = [(i+1)/60 for i in range(60)]
-
-next_tick_seconds = None
-next_tick_fractional = None
-next_tick_index = None
-
-# if we fall behind more than this many ticks,
-# just send in this many ticks and continue.
-max_ticks = 6
-
-
-@w2d.event
-def update(t, dt):
+async def drive_main_clock():
     # convert time into ticks.
     # there are 60 ticks in a second.
     # the basic idea:
@@ -442,36 +355,39 @@ def update(t, dt):
     #    time.  for every 1/60s threshold that has
     #    elapsed since last time, send a tick to
     #    all clocks.
+    tick_offsets = [(i+1)/60 for i in range(60)]
 
-    global next_tick_seconds
-    global next_tick_fractional
-    global next_tick_index
+    next_tick_seconds = None
+    next_tick_fractional = None
+    next_tick_index = None
 
-    if next_tick_seconds == None:
-        next_tick_seconds, fractional = math.modf(t - dt)
-        next_tick_index = bisect.bisect(tick_offsets, fractional)
-        next_tick_fractional = tick_offsets[next_tick_index]
-        return
+    # if we fall behind more than this many ticks,
+    # just send in this many ticks and continue.
+    max_ticks = 6
 
-    assert t >= next_tick_seconds
-    fractional = t - next_tick_seconds
-    assert fractional <= (62/60)
-    ticks = 0
-    while fractional >= next_tick_fractional:
-        ticks += 1
+    next_tick_seconds, fractional = 0, 0
+    next_tick_index = bisect.bisect(tick_offsets, fractional)
+    next_tick_fractional = tick_offsets[next_tick_index]
 
-        next_tick_index += 1
-        if next_tick_index == 60:
-            assert next_tick_fractional == 1
-            next_tick_index = 0
-            fractional -= 1
-            next_tick_seconds += 1
-        next_tick_fractional = tick_offsets[next_tick_index]
+    async for t in wasabi2d.clock.coro.frames():
+        assert t >= next_tick_seconds
+        fractional = t - next_tick_seconds
+        assert fractional <= (62/60)
+        ticks = 0
+        while fractional >= next_tick_fractional:
+            ticks += 1
 
-    ticks = min(ticks, max_ticks)
-    for _ in range(ticks):
-        main_clock.on_tick()
+            next_tick_index += 1
+            if next_tick_index == 60:
+                assert next_tick_fractional == 1
+                next_tick_index = 0
+                fractional -= 1
+                next_tick_seconds += 1
+            next_tick_fractional = tick_offsets[next_tick_index]
 
+        ticks = min(ticks, max_ticks)
+        for _ in range(ticks):
+            main_clock.tick(1 / 60)
 
 
 for x in range(10, 14):
@@ -491,6 +407,26 @@ game = Game()
 level = Level()
 player = Player()
 
-player.pos = current_checkpoint.pos
+async def pauser():
+   while True:
+        await w2d.next_event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+        paused = game_clock.paused = not game_clock.paused
+        if paused:
+            for layer in layers:
+                scene.layers[layer].set_effect('blur')
+        else:
+            for layer in layers:
+                scene.layers[layer].clear_effect()
 
-w2d.run()
+
+async def main():
+    player = Player()
+    player.pos = current_checkpoint.pos
+
+    async with w2d.Nursery() as ns:
+        ns.do(drive_main_clock())
+        ns.do(pauser())
+        ns.do(player.run())
+
+
+w2d.run(main())
