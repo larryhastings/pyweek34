@@ -52,10 +52,16 @@ def on_player_collided(
     space: pymunk.Space,
     data: Any,
 ) -> bool:
+
     if not arbiter.is_first_contact:
         return True
 
     a, b = arbiter.shapes
+
+    if b.sensor:
+        assert hasattr(b, 'game_object')
+        o = b.game_object
+        o.on_touched()
 
     is_down = 89 < arbiter.normal.angle_degrees < 91
     if is_down:
@@ -105,7 +111,9 @@ def create_body(
 
 def create_static(
     pos: vec2,
-    size: tuple[int, int] = (1, 1)
+    size: tuple[int, int] = (1, 1),
+    *,
+    sensor=False
 ) -> pymunk.Shape:
     """Create a static body centred at the given position."""
     hw, hh = vec2(size) / 2
@@ -119,8 +127,12 @@ def create_static(
         pos + vec2(-hw, hh),
     ]
     poly = pymunk.Poly(space.static_body, [tuple(c) for c in coords])
-    poly.friction = FRICTION
-    poly.elasticity = 0
+    if sensor:
+        poly.sensor = True
+    else:
+        poly.friction = FRICTION
+        poly.elasticity = 0
+
     space.add(poly)
     return poly
 
@@ -162,10 +174,6 @@ for color, layer in color_to_layer.items():
     color_tile_maps[color] = scene.layers[layer].add_tile_map()
 
 
-colored_block_tiles = {
-    'red': 'red_block_20x20',
-    'blue': 'blue_block_20x20',
-}
 
 
 class Block:
@@ -187,14 +195,14 @@ class Block:
         self.shape = create_static(position)
         level.color_to_shapes[color].append(self.shape)
 
-    def is_solid(self):
-        return level.color_state[self.color]
-
 
 current_checkpoint = None
 
 
 class Checkpoint(Block):
+    deselected_image = "pixel_platformer/tiles/tile_0128"
+    selected_image = "pixel_platformer/tiles/tile_0129"
+
     def __init__(self, image, x, y=None, *, initial=False):
         global current_checkpoint
         if (y is None) and isinstance(x, vec2):
@@ -203,13 +211,25 @@ class Checkpoint(Block):
             position = vec2(x, y)
         self.pos = position
         # grid[int(position.x)][int(position.y)].append(self)
-        if initial:
-            current_checkpoint = self
-        tile_map = gray_tile_map
-        tile_map[x, y] = image
+        # tile_map = gray_tile_map
+        # tile_map[x, y] = image
+        self.sprite = scene.layers[gray_layer].add_sprite(self.deselected_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        self.shape = create_static(position, sensor=True)
+        self.shape.game_object = self
 
-    def is_solid(self):
-        return False
+        if initial:
+            self.on_touched()
+
+    def on_touched(self):
+        global current_checkpoint
+        if current_checkpoint != self:
+            if current_checkpoint:
+                current_checkpoint.on_deselected()
+            current_checkpoint = self
+            self.sprite.image = self.selected_image
+
+    def on_deselected(self):
+        self.sprite.image = self.deselected_image
 
 
 class BackgroundBlock:
@@ -223,8 +243,6 @@ class BackgroundBlock:
         tile_map = background_tile_map
         tile_map[x, y] = image
 
-    def is_solid(self):
-        return False
 
 actions = {
     "move_up",
@@ -386,7 +404,7 @@ class Player:
                 self.nursery = ns
                 ns.do(self.accel())
                 ns.do(self.jump())
-                ns.do(self.update_camera())
+                ns.do(self.monitor_player_position())
                 ns.do(self.handle_keys())
 
     async def accel(self):
@@ -414,11 +432,27 @@ class Player:
                 await self.on_ground
                 ns.cancel()
 
-    async def update_camera(self):
-        """Accelerate the player, including in the air."""
-        async for _ in w2d.clock.coro.frames():
-            pass
-            # print(f"adjust camera based on {self.body.position=}")
+    async def monitor_player_position(self):
+        """Monitor the player's position."""
+        async for _ in game_clock.coro.frames():
+            # Although it's not explicitly guaranteed by wasabi2d
+            # and its -> *async* <- coroutines, in fact this will
+            # always be run *after* run_physics() computes its
+            # physics step for a given logical frame.
+
+            pos = self.body.position
+
+            # check if the player has fallen below the death plane
+            if pos.y >= scene_height:
+                self.body.position = tuple(current_checkpoint.pos)
+                self.shape.pos = self.body.position * TILE_SIZE
+                continue
+
+            # adjust camera based on self.body.position
+            # (the player no longer stores its own position,
+            #  it's only represented in PyMunk in tile space
+            #  and onscreen in screen space)
+
 
 async def drive_main_clock():
     # convert time into ticks.
