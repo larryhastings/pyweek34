@@ -26,8 +26,8 @@ gamedir_path = Path(sys.argv[0]).resolve().parent
 
 colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'}
 
-layers = list(range(10))
-background_layer, red_layer, orange_layer, yellow_layer, green_layer, blue_layer, purple_layer, gray_layer, hud_layer, sprite_layer = layers
+layers = list(range(16))
+background_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, hud_layer, sprite_layer = layers
 
 color_to_layer = {
     'red': red_layer,
@@ -170,8 +170,13 @@ scene_height = 40
 
 
 color_tile_maps = {}
+color_off_tile_maps = {}
+
 for color, layer in color_to_layer.items():
     color_tile_maps[color] = scene.layers[layer].add_tile_map()
+    if color != 'gray':
+        color_off_tile_maps[color] = scene.layers[layer + 1].add_tile_map()
+        scene.layers[layer + 1].visible = False
 
 
 
@@ -190,7 +195,10 @@ class Block:
         # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
         tile_map = color_tile_maps[color]
         tile_map[x, y] = image
-        # tile_map[x, y] = colored_block_tiles[color]
+
+        if color != 'gray':
+            tile_map = color_off_tile_maps[color]
+            tile_map[x, y] = f"{color}_off"
 
         self.shape = create_static(position)
         level.color_to_shapes[color].append(self.shape)
@@ -270,18 +278,6 @@ cell_size = TILE_SIZE
 background_tile_map = scene.layers[background_layer].add_tile_map()
 gray_tile_map = color_tile_maps['gray']
 
-scene = w2d.Scene()
-scene.background = (0.9, 0.9, 0.9)
-
-
-color_tile_maps = {}
-for color, layer in color_to_layer.items():
-    color_tile_maps[color] = scene.layers[layer].add_tile_map()
-
-
-background_tile_map = scene.layers[background_layer].add_tile_map()
-gray_tile_map = color_tile_maps['gray']
-
 main_clock = Clock()
 game_clock = main_clock.create_sub_clock()
 
@@ -292,9 +288,11 @@ class Level:
         self.color_to_shapes = {color: [] for color in colors}
 
     def toggle_color(self, color):
+        old_state = self.color_state[color]
         new_state = not self.color_state[color]
         self.color_state[color] = new_state
         scene.layers[color_to_layer[color]].visible = new_state
+        scene.layers[color_to_layer[color] + 1].visible = old_state
 
         if not new_state:
             space.remove(*self.color_to_shapes[color])
@@ -347,32 +345,6 @@ class Player:
         self._standing_on_count -= 1
         if self._standing_on_count == 0:
             self.on_ground = w2d.Event()
-
-    def refresh_state(self):
-        for name, value in self.stateful_actions.items():
-            assert value >= 0, f"actions[{name!r}] is {value}, which is < 0!"
-
-        self.desired_x_speed = ((self.stateful_actions['move_right'] and 1) + (self.stateful_actions['move_left'] and -1)) * self.maximum_x_speed
-        if self.speed.x != self.desired_x_speed:
-            self.x_acceleration = self.x_acceleration_factor
-            if self.speed.x > self.desired_x_speed:
-                self.x_acceleration = -self.x_acceleration
-
-        y_speed = self.speed.y
-
-        for action in self.momentary_actions_queue:
-            if action == 'jump' and self.jumps:
-                # print("jump!")
-                self.jumps -= 1
-                y_speed = self.jump_y_speed
-            if action.startswith('toggle_'):
-                color = action.partition('_')[2]
-                level.toggle_color(color)
-
-        self.momentary_actions_queue.clear()
-
-        self.speed = vec2(self.speed.x, y_speed)
-        # print(f"{self.pos=} {self.speed=}")
 
     async def handle_keys(self):
         key_to_action = {
@@ -445,7 +417,9 @@ class Player:
             # check if the player has fallen below the death plane
             if pos.y >= scene_height:
                 self.body.position = tuple(current_checkpoint.pos)
+                self.body.velocity = (0.0, 0.0)
                 self.shape.pos = self.body.position * TILE_SIZE
+                # print(f"{dir(self.body)=}")
                 continue
 
             # adjust camera based on self.body.position
