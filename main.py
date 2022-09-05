@@ -350,18 +350,16 @@ class Player:
 
 async def drive_main_clock():
     # convert time into ticks.
-    # there are 60 ticks in a second.
+    # there are sixty ticks per second.
+    #
     # the basic idea:
-    #    whenever wasabi calls us,
-    #    we compare the last time to the current
-    #    time.  for every 1/60s threshold that has
-    #    elapsed since last time, send a tick to
-    #    all clocks.
+    #    whenever wasabi calls us, compare the last
+    #    time to the current time.  for every 1/60s
+    #    threshold that has elapsed since last time
+    #    wasabi called us, send a tick to the game clock.
+    #
     tick_offsets = [(i+1)/60 for i in range(60)]
-
-    next_tick_seconds = None
-    next_tick_fractional = None
-    next_tick_index = None
+    one_sixtieth = 1/60
 
     # if we fall behind more than this many ticks,
     # just send in this many ticks and continue.
@@ -374,10 +372,11 @@ async def drive_main_clock():
     async for t in wasabi2d.clock.coro.frames():
         assert t >= next_tick_seconds
         fractional = t - next_tick_seconds
-        assert fractional <= (62/60)
         ticks = 0
         while fractional >= next_tick_fractional:
             ticks += 1
+            if ticks <= max_ticks:
+                main_clock.tick(one_sixtieth)
 
             next_tick_index += 1
             if next_tick_index == 60:
@@ -387,13 +386,7 @@ async def drive_main_clock():
                 next_tick_seconds += 1
             next_tick_fractional = tick_offsets[next_tick_index]
 
-        ticks = min(ticks, max_ticks)
-        for _ in range(ticks):
-            main_clock.tick(1 / 60)
 
-
-# cell = grid[x][y]
-# isinstance(cell, list)
 grid = []
 
 for _ in range(scene_width + 1):
