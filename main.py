@@ -3,6 +3,9 @@ import collections
 from contextlib import contextmanager
 from typing import Any, Generator
 import typing
+from pathlib import Path
+from pytiled_parser import parse_map
+import sys
 
 import pymunk
 import wasabi2d.loop
@@ -13,14 +16,18 @@ from wasabigeom import vec2
 import pygame
 
 
-TILE_SIZE: int = 20
+TILE_SIZE: int = 18
 FRICTION: float = 0
 GRAVITY: float = 20
 
 colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple'}
 
-layers = list(range(8))
-hud_layer, sprite_layer, red_layer, orange_layer, yellow_layer, green_layer, blue_layer, purple_layer = layers
+gamedir_path = Path(sys.argv[0]).resolve().parent
+
+colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'}
+
+layers = list(range(10))
+background_layer, red_layer, orange_layer, yellow_layer, green_layer, blue_layer, purple_layer, gray_layer, hud_layer, sprite_layer = layers
 
 color_to_layer = {
     'red': red_layer,
@@ -29,6 +36,7 @@ color_to_layer = {
     'green': green_layer,
     'blue': blue_layer,
     'purple': purple_layer,
+    'gray': gray_layer,
 }
 
 
@@ -172,19 +180,20 @@ colored_block_tiles = {
 
 
 class Block:
-    def __init__(self, color, x, y=None):
+    def __init__(self, color, image, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
         else:
             position = vec2(x, y)
         self.pos = position
         grid[int(position.x)][int(position.y)].append(self)
-        assert color in colored_block_tiles
+        assert color in color_tile_maps, f"{color=} not in {color_tile_maps=}"
         self.color = color
 
         # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
         tile_map = color_tile_maps[color]
-        tile_map[x, y] = colored_block_tiles[color]
+        tile_map[x, y] = image
+        # tile_map[x, y] = colored_block_tiles[color]
 
         self.shape = create_static(position)
 
@@ -195,8 +204,8 @@ class Block:
 current_checkpoint = None
 
 
-class Checkpoint:
-    def __init__(self, x, y=None, *, initial=False):
+class Checkpoint(Block):
+    def __init__(self, inage, x, y=None, *, initial=False):
         global current_checkpoint
         if (y is None) and isinstance(x, vec2):
             position = x
@@ -206,9 +215,30 @@ class Checkpoint:
         grid[int(position.x)][int(position.y)].append(self)
         if initial:
             current_checkpoint = self
+        tile_map = gray_tile_map
+        tile_map[x, y] = image
 
+    def is_solid(self):
+        return False
 
-ACTIONS = {
+    def is_solid(self):
+        return False
+
+class BackgroundBlock:
+    def __init__(self, image, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+
+        tile_map = background_tile_map
+        tile_map[x, y] = image
+
+    def is_solid(self):
+        return False
+
+actions = {
     "move_up",
     "move_down",
     "move_left",
@@ -227,7 +257,34 @@ ACTIONS = {
     "toggle_purple",
     }
 
+level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
 
+assert len(level.tilesets) == 1
+for value in level.tilesets.values():
+    tileset = value
+    break
+
+
+# expressed in cells
+scene_width, scene_height = level.map_size
+
+assert tileset.tile_width == tileset.tile_height
+cell_size = tileset.tile_width
+
+background_tile_map = scene.layers[background_layer].add_tile_map()
+gray_tile_map = color_tile_maps['gray']
+
+scene = w2d.Scene(scene_width * cell_size, scene_height * cell_size)
+scene.background = (0.9, 0.9, 0.9)
+
+
+color_tile_maps = {}
+for color, layer in color_to_layer.items():
+    color_tile_maps[color] = scene.layers[layer].add_tile_map()
+
+
+background_tile_map = scene.layers[background_layer].add_tile_map()
+gray_tile_map = color_tile_maps['gray']
 
 main_clock = Clock()
 game_clock = main_clock.create_sub_clock()
@@ -371,7 +428,6 @@ class Player:
                 continue
             if ev.type == pygame.KEYDOWN:
                 if action in self.stateful_actions:
-                    print("state +", action, ev)
                     self.stateful_actions[action] += 1
                 else:
                     self.momentary_actions_queue.append(action)
@@ -529,16 +585,66 @@ async def drive_main_clock():
 
 
 def init_level():
-    for x in range(10, 14):
-        Block('red', x, 20)
+    # cell = grid[x][y]
+    # isinstance(cell, list)
+    grid = []
 
-    for x in range(15, 19):
-        Block('red', x, 20)
+    for _ in range(scene_width + 1):
+        row = []
+        grid.append(row)
+        for __ in range(scene_height + 1):
+            row.append([])
 
-    for x in range(21, 28):
-        Block('blue', x, 16)
 
-    Checkpoint(11, 18, initial=True)
+
+    for layer in level.layers:
+        if layer.name == "Background":
+            scene_layer = scene.layers[background_layer]
+        elif layer.name == "Terrain":
+            scene_layer = scene.layers[gray_layer]
+        else:
+            assert None, "unhandled layer name"
+
+        for y, column in enumerate(layer.data):
+            for x, tile_id in enumerate(column):
+                # print(f"{x=} {y=} {tile_id=}")
+                if not tile_id:
+                    continue
+                tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
+                tile = tileset.tiles[tile_id]
+                if tile.properties:
+                    checkpoint = tile.properties.get("checkpoint", None)
+                    color = tile.properties.get("color", None)
+                else:
+                    checkpoint = color = None
+                image = tile.image
+                assert image
+                if checkpoint:
+                    initial = checkpoint == "selected"
+                    block = Checkpoint(image, x, y, initial=initial)
+                    if initial:
+                        current_checkpoint = block
+                elif color:
+                    block = Block(color, image, x, y)
+                else:
+                    block = BackgroundBlock(image, x, y)
+
+    assert current_checkpoint, "no initial checkpoint set in map!"
+
+
+
+    # for x in range(10, 14):
+    #     Block('red', x, 20)
+
+        # for x in range(15, 19):
+        #     Block('red', x, 20)
+
+        # for x in range(21, 28):
+        #     Block('blue', x, 16)
+
+
+
+    # Checkpoint(11, 18, initial=True)
 
 
 async def pauser():
