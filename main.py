@@ -34,10 +34,10 @@ cell_size = 20
 # isinstance(cell, list)
 grid = []
 
-for _ in range(scene_width):
+for _ in range(scene_width + 1):
     row = []
     grid.append(row)
-    for __ in range(scene_height):
+    for __ in range(scene_height + 1):
         row.append([])
 
 
@@ -179,6 +179,8 @@ class Player(Listener):
         self.x_acceleration = 0
         self.desired_x_speed = 0
 
+        self.death_plane = scene_height
+
         # TODO
         # these are tuned to feel good.
         # more tuning is probably required.
@@ -187,11 +189,11 @@ class Player(Listener):
         # and if you're moving at full speed you
         # reliably clear an X tile gap horizontally.
         #
-        self.maximum_x_speed = 40 # pixels per second
-        self.x_acceleration_factor = 400 # pixels per second
-        self.jump_y_speed = -70 # pixels per second
-        self.gravity = 400 # pixels per second
-        self.terminal_velocity = 100 # pixels per second
+        self.maximum_x_speed = 40 # cells per second
+        self.x_acceleration_factor = 400 # cells per second per second
+        self.jump_y_speed = -70 # cells per second
+        self.gravity = 400 # cells per second per second
+        self.terminal_velocity = 100 # cells per second
         self.maximum_y = 19
 
         self.jumps = player_max_jumps
@@ -261,9 +263,13 @@ class Player(Listener):
 
     def on_tick(self):
         dt = 1/60
+
         # print(f"update: {t=} {dt=}")
         # print(f"    start {self.pos=} {self.speed=}")
-        changed = False
+        starting_pos = self.pos
+        starting_cell_x = int(self.pos.x)
+        starting_cell_y = int(self.pos.y)
+
         speed_x, speed_y = self.speed
         starting_speed_x = speed_x
         starting_speed_y = speed_y
@@ -282,16 +288,54 @@ class Player(Listener):
         if ((speed_x != starting_speed_x) or (speed_y != starting_speed_y)):
             self.speed = vec2(speed_x, speed_y)
 
-        self.pos += self.speed * dt
+        delta = self.speed * dt
 
-        if self.pos.y > self.maximum_y:
-            self.jumps = player_max_jumps
-            speed_y = 0
-            self.pos = vec2(self.pos.x, self.maximum_y)
+        # death plane
+        if (self.pos.y + delta.y) >= self.death_plane:
+            self.pos = current_checkpoint.pos
+            self.speed = vec2(0, 0)
+            delta = 0
+        else:
+            # lame second approximation for collision.
+            # instead of moving the character by "delta"
+            # all at once, move using a number of steps,
+            # at least two.
+            steps = int(max(delta.x, delta.y, 1) * 2)
+
+            new_pos = self.pos
+            delta_per_step = delta / steps
+            for _ in range(steps):
+                new_pos += delta_per_step
+
+                # lame first approximation for collision.
+                # if we end the tick sticking into a block,
+                # simply move the player up until they're
+                # resting on the block.
+
+                final_cell_x = int(new_pos.x)
+                final_cell_y = int(new_pos.y)
+                cell_below_y = final_cell_y + 1
+                cells = grid[final_cell_x][cell_below_y]
+
+                for cell in cells:
+                    if isinstance(cell, Block):
+                        collision = True
+                        break
+                else:
+                    collision = False
+
+                if collision:
+                    self.jumps = player_max_jumps
+                    delta_per_step = vec2(delta_per_step.x, 0)
+                    self.speed = vec2(self.speed.x, 0)
+                    new_pos = vec2(new_pos.x, final_cell_y)
+            self.pos = new_pos
 
         # print(f"    update pos, {self.pos=}")
         # print(f"    end    {self.pos=} {self.speed=}")
         # print()
+
+        # print(f"{self.pos=}")
 
 
 
@@ -361,12 +405,17 @@ def update(t, dt):
 
 
 
-Block(10, 20)
-Block(11, 20)
-Block(12, 20)
-Block(13, 20)
+for x in range(10, 14):
+    Block(x, 20)
 
-Checkpoint(10, 19, initial=True)
+for x in range(15, 19):
+    Block(x, 20)
+
+for x in range(21, 28):
+    Block(x, 16)
+
+
+Checkpoint(11, 18, initial=True)
 
 game = Game()
 player = Player()
