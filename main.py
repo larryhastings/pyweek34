@@ -106,10 +106,9 @@ def create_body(
 def create_static(
     pos: vec2,
     size: tuple[int, int] = (1, 1)
-) -> None:
+) -> pymunk.Shape:
     """Create a static body centred at the given position."""
     hw, hh = vec2(size) / 2
-
 
     # There's no way to position a pymunk shape after creation so we create it
     # at the position we want it
@@ -123,13 +122,15 @@ def create_static(
     poly.friction = FRICTION
     poly.elasticity = 0
     space.add(poly)
+    return poly
 
 
 class Positionable(typing.Protocol):
     pos: vec2
 
 
-_physical_objects: dict[pymunk.Body: Positionable] = {}
+physical_objects: dict[pymunk.Body: Positionable] = {}
+
 
 
 @contextmanager
@@ -144,11 +145,11 @@ def physical(
     body = create_body(drawn.pos / TILE_SIZE, mass=mass)
     try:
         with drawn:
-            _physical_objects[body] = drawn
+            physical_objects[body] = drawn
             yield body
     finally:
         space.remove(body, *body.shapes)
-        del _physical_objects[body]
+        del physical_objects[body]
 
 
 # expressed in cells
@@ -174,7 +175,7 @@ class Block:
         else:
             position = vec2(x, y)
         self.pos = position
-        grid[int(position.x)][int(position.y)].append(self)
+        # grid[int(position.x)][int(position.y)].append(self)
         assert color in color_tile_maps, f"{color=} not in {color_tile_maps=}"
         self.color = color
 
@@ -184,6 +185,7 @@ class Block:
         # tile_map[x, y] = colored_block_tiles[color]
 
         self.shape = create_static(position)
+        level.color_to_shapes[color].append(self.shape)
 
     def is_solid(self):
         return level.color_state[self.color]
@@ -200,7 +202,7 @@ class Checkpoint(Block):
         else:
             position = vec2(x, y)
         self.pos = position
-        grid[int(position.x)][int(position.y)].append(self)
+        # grid[int(position.x)][int(position.y)].append(self)
         if initial:
             current_checkpoint = self
         tile_map = gray_tile_map
@@ -269,11 +271,17 @@ game_clock = main_clock.create_sub_clock()
 class Level:
     def __init__(self):
         self.color_state = {color: True for color in colors}
+        self.color_to_shapes = {color: [] for color in colors}
 
     def toggle_color(self, color):
         new_state = not self.color_state[color]
         self.color_state[color] = new_state
         scene.layers[color_to_layer[color]].visible = new_state
+
+        if not new_state:
+            space.remove(*self.color_to_shapes[color])
+        else:
+            space.add(*self.color_to_shapes[color])
 
 
 
@@ -305,41 +313,13 @@ class Player:
 
     def __init__(self, controller: Controller):
         self.shape = None
-        self._pos = None
         self.speed = vec2(0, 0)
         self.x_acceleration = 0
         self.desired_x_speed = 0
 
-        self.death_plane = scene_height
-
-        # TODO
-        # these are tuned to feel good.
-        # more tuning is probably required.
-        # in particular, we should tune jumps so they
-        # reliably achieve Y tiles vertically,
-        # and if you're moving at full speed you
-        # reliably clear an X tile gap horizontally.
-        #
-        self.maximum_x_speed = 40 # cells per second
-        self.x_acceleration_factor = 400 # cells per second per second
-        self.jump_y_speed = -70 # cells per second
-        self.gravity = 400 # cells per second per second
-        self.terminal_velocity = 100 # cells per second
-        self.maximum_y = 19
-
         self.controller = controller
         self._standing_on_count = 0
         self.on_ground = w2d.Event()
-
-    @property
-    def pos(self):
-        return self._pos
-
-    @pos.setter
-    def pos(self, v):
-        self._pos = v
-        if self.shape:
-            self.shape.pos = v * cell_size
 
     def _add_floor(self):
         self._standing_on_count += 1
@@ -378,39 +358,20 @@ class Player:
 
     async def handle_keys(self):
         key_to_action = {
-            w2d.keys.W: 'move_up',
-            w2d.keys.A: 'move_left',
-            w2d.keys.S: 'move_down',
-            w2d.keys.D: 'move_right',
-
-            w2d.keys.UP: 'move_up',
-            w2d.keys.DOWN: 'move_left',
-            w2d.keys.LEFT: 'move_down',
-            w2d.keys.RIGHT: 'move_right',
-
-            w2d.keys.SPACE: 'jump',
-            w2d.keys.RETURN: 'shoot',
-
-            w2d.keys.K_1: "toggle_red",
-            w2d.keys.K_2: "toggle_orange",
-            w2d.keys.K_3: "toggle_yellow",
-            w2d.keys.K_4: "toggle_green",
-            w2d.keys.K_5: "toggle_blue",
-            w2d.keys.K_6: "toggle_purple",
+            w2d.keys.K_1: "red",
+            w2d.keys.K_2: "orange",
+            w2d.keys.K_3: "yellow",
+            w2d.keys.K_4: "green",
+            w2d.keys.K_5: "blue",
+            w2d.keys.K_6: "purple",
         }
+
         async for ev in w2d.events.subscribe(pygame.KEYDOWN, pygame.KEYUP):
             key = w2d.constants.keys(ev.key)
-            if not (action := key_to_action.get(key)):
+            if not (color := key_to_action.get(key)):
                 continue
             if ev.type == pygame.KEYDOWN:
-                if action in self.stateful_actions:
-                    self.stateful_actions[action] += 1
-                else:
-                    self.momentary_actions_queue.append(action)
-            else:
-                if action in self.stateful_actions:
-                    self.stateful_actions[action] -= 1
-            self.refresh_state()
+                level.toggle_color(color)
 
     async def run(self, start_pos: vec2):
         self.shape = scene.layers[sprite_layer].add_star(
@@ -425,7 +386,8 @@ class Player:
                 self.nursery = ns
                 ns.do(self.accel())
                 ns.do(self.jump())
-                #ns.do(self.handle_keys())
+                ns.do(self.update_camera())
+                ns.do(self.handle_keys())
 
     async def accel(self):
         """Accelerate the player, including in the air."""
@@ -452,6 +414,11 @@ class Player:
                 await self.on_ground
                 ns.cancel()
 
+    async def update_camera(self):
+        """Accelerate the player, including in the air."""
+        async for _ in w2d.clock.coro.frames():
+            pass
+            # print(f"adjust camera based on {self.body.position=}")
 
 async def drive_main_clock():
     # convert time into ticks.
@@ -493,16 +460,16 @@ async def drive_main_clock():
 
 
 def init_level():
-    global grid, level
+    # global grid # , level
     # cell = grid[x][y]
     # isinstance(cell, list)
-    grid = []
+    # grid = []
 
-    for _ in range(scene_width + 1):
-        row = []
-        grid.append(row)
-        for __ in range(scene_height + 1):
-            row.append([])
+    # for _ in range(scene_width + 1):
+    #     row = []
+    #     grid.append(row)
+    #     for __ in range(scene_height + 1):
+    #         row.append([])
 
     level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
 
@@ -562,7 +529,7 @@ async def run_physics():
     """Step the Pymunk physics simulation."""
     async for dt in game_clock.coro.frames_dt():
         space.step(dt)
-        for body, positionable in _physical_objects.items():
+        for body, positionable in physical_objects.items():
             positionable.pos = body.position * TILE_SIZE
 
 
