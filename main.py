@@ -6,7 +6,14 @@ from pathlib import Path
 import sys
 
 game_path = Path(sys.argv[0]).resolve().parent
+os.chdir(str(game_path))
+
 w2d_path = game_path.joinpath("w2d")
+if not w2d_path.exists():
+    os.system("git clone https://github.com/lordmauve/wasabi2d.git w2d")
+    os.chdir("w2d")
+    os.system("git checkout 38175c94531efc229c562e0721b9b50e80297401")
+    os.chdir("..")
 
 sys.path.insert(0, str(w2d_path))
 
