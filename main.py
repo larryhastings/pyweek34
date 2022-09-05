@@ -19,14 +19,21 @@ sys.path.insert(0, str(w2d_path))
 
 import wasabi2d as w2d
 import wasabigeom
-
 vec2 = wasabigeom.vec2
 
-hud_layer = 0
-sprite_layer = 1
-landscape_layer = 2
+colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple'}
 
-layers = list(range(3))
+layers = list(range(8))
+hud_layer, sprite_layer, red_layer, orange_layer, yellow_layer, green_layer, blue_layer, purple_layer = layers
+
+color_to_layer = {
+    'red': red_layer,
+    'orange': orange_layer,
+    'yellow': yellow_layer,
+    'green': green_layer,
+    'blue': blue_layer,
+    'purple': purple_layer,
+}
 
 scene = w2d.Scene()
 scene.background = (0.9, 0.9, 0.9)
@@ -48,9 +55,15 @@ for _ in range(scene_width + 1):
         row.append([])
 
 
-tile_map = scene.layers[landscape_layer].add_tile_map()
+color_tile_maps = {}
+for color, layer in color_to_layer.items():
+    color_tile_maps[color] = scene.layers[layer].add_tile_map()
 
-block_tile = 'red_block_20x20'
+colored_block_tiles = {
+    'red': 'red_block_20x20',
+    'blue': 'blue_block_20x20',
+}
+
 
 class Listener:
     def on_key_down(self, key):
@@ -66,16 +79,22 @@ class Listener:
 
 
 class Block(Listener):
-    def __init__(self, x, y=None):
+    def __init__(self, color, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
         else:
             position = vec2(x, y)
         self.pos = position
         grid[int(position.x)][int(position.y)].append(self)
+        assert color in colored_block_tiles
+        self.color = color
 
         # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
-        tile_map[x, y] = block_tile
+        tile_map = color_tile_maps[color]
+        tile_map[x, y] = colored_block_tiles[color]
+
+    def is_solid(self):
+        return level.color_state[self.color]
 
 current_checkpoint = None
 
@@ -94,15 +113,23 @@ class Checkpoint(Listener):
 event_listeners = []
 
 actions = {
-    "up",
-    "down",
-    "left",
-    "right",
+    "move_up",
+    "move_down",
+    "move_left",
+    "move_right",
+
     "jump,"
     "shoot",
 
     "pause",
     "quit",
+
+    "toggle_red",
+    "toggle_orange",
+    "toggle_yellow",
+    "toggle_green",
+    "toggle_blue",
+    "toggle_purple",
     }
 
 
@@ -174,14 +201,25 @@ class Game(Listener):
             scene.layers[layer].clear_effect()
 
 
+class Level(Listener):
+    def __init__(self):
+        self.color_state = {color: True for color in colors}
+
+    def toggle_color(self, color):
+        new_state = not self.color_state[color]
+        self.color_state[color] = new_state
+        scene.layers[color_to_layer[color]].visible = new_state
+
+
+
 player_max_jumps = 2
 player_max_dashes = 1
 
 class Player(Listener):
     def __init__(self):
         self.shape = scene.layers[sprite_layer].add_star(points=6, outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
+
         self._pos = None
-        self.actions = collections.defaultdict(int)
         self.speed = vec2(0, 0)
         self.x_acceleration = 0
         self.desired_x_speed = 0
@@ -207,14 +245,28 @@ class Player(Listener):
         self.dashes = player_max_dashes
 
         self.key_to_action = {
-            w2d.keys.W: 'up',
-            w2d.keys.A: 'left',
-            w2d.keys.S: 'down',
-            w2d.keys.D: 'right',
+            w2d.keys.W: 'move_up',
+            w2d.keys.A: 'move_left',
+            w2d.keys.S: 'move_down',
+            w2d.keys.D: 'move_right',
 
             w2d.keys.SPACE: 'jump',
             w2d.keys.RETURN: 'shoot',
+
+            w2d.keys.K_1: "toggle_red",
+            w2d.keys.K_2: "toggle_orange",
+            w2d.keys.K_3: "toggle_yellow",
+            w2d.keys.K_4: "toggle_green",
+            w2d.keys.K_5: "toggle_blue",
+            w2d.keys.K_6: "toggle_purple",
             }
+        self.stateful_actions = {
+            'move_up': 0,
+            'move_left': 0,
+            'move_down': 0,
+            'move_right': 0,
+            }
+        self.momentary_actions_queue = collections.deque()
         self.known_actions = set(self.key_to_action.values())
         event_listeners.append(self)
         game_clock.append(self)
@@ -230,12 +282,16 @@ class Player(Listener):
 
     def on_start_action(self, action):
         if action in self.known_actions:
-            self.actions[action] += 1
+            if action in self.stateful_actions:
+                self.stateful_actions[action] += 1
+            else:
+                self.momentary_actions_queue.append(action)
             self.refresh_state()
 
     def on_stop_action(self, action):
         if action in self.known_actions:
-            self.actions[action] -= 1
+            if action in self.stateful_actions:
+                self.stateful_actions[action] -= 1
             self.refresh_state()
 
     def on_key_down(self, key):
@@ -249,10 +305,10 @@ class Player(Listener):
             return self.on_stop_action(action)
 
     def refresh_state(self):
-        for name, value in self.actions.items():
+        for name, value in self.stateful_actions.items():
             assert value >= 0, f"actions[{name!r}] is {value}, which is < 0!"
 
-        self.desired_x_speed = ((self.actions['right'] and 1) + (self.actions['left'] and -1)) * self.maximum_x_speed
+        self.desired_x_speed = ((self.stateful_actions['move_right'] and 1) + (self.stateful_actions['move_left'] and -1)) * self.maximum_x_speed
         if self.speed.x != self.desired_x_speed:
             self.x_acceleration = self.x_acceleration_factor
             if self.speed.x > self.desired_x_speed:
@@ -260,10 +316,16 @@ class Player(Listener):
 
         y_speed = self.speed.y
 
-        if self.actions['jump'] and self.jumps:
-            # print("jump!")
-            self.jumps -= 1
-            y_speed = self.jump_y_speed
+        for action in self.momentary_actions_queue:
+            if action == 'jump' and self.jumps:
+                # print("jump!")
+                self.jumps -= 1
+                y_speed = self.jump_y_speed
+            if action.startswith('toggle_'):
+                color = action.partition('_')[2]
+                level.toggle_color(color)
+
+        self.momentary_actions_queue.clear()
 
         self.speed = vec2(self.speed.x, y_speed)
         # print(f"{self.pos=} {self.speed=}")
@@ -325,13 +387,13 @@ class Player(Listener):
                 cells = grid[final_cell_x][cell_below_y]
 
                 for cell in cells:
-                    if isinstance(cell, Block):
-                        collision = True
+                    if isinstance(cell, Block) and cell.is_solid():
+                        collision_below = True
                         break
                 else:
-                    collision = False
+                    collision_below = False
 
-                if collision:
+                if collision_below:
                     self.jumps = player_max_jumps
                     delta_per_step = vec2(delta_per_step.x, 0)
                     self.speed = vec2(self.speed.x, 0)
@@ -413,18 +475,20 @@ def update(t, dt):
 
 
 for x in range(10, 14):
-    Block(x, 20)
+    Block('red', x, 20)
 
 for x in range(15, 19):
-    Block(x, 20)
+    Block('red', x, 20)
 
 for x in range(21, 28):
-    Block(x, 16)
+    Block('blue', x, 16)
+
 
 
 Checkpoint(11, 18, initial=True)
 
 game = Game()
+level = Level()
 player = Player()
 
 player.pos = current_checkpoint.pos
