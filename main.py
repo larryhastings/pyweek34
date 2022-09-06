@@ -1,26 +1,25 @@
 import bisect
 import collections
 from contextlib import contextmanager
-from typing import Any, Generator
-import typing
 from pathlib import Path
+import pymunk
 from pytiled_parser import parse_map
 import sys
-
-import pymunk
+from typing import Any, Generator
+import typing
 import wasabi2d.loop
 from wasabi2d.clock import Clock
 import wasabi2d as w2d
+import wasabigeom
 from wasabigeom import vec2
 
+# import after wasabi2d, this suppresses the PyGame stdout message
 import pygame
 
 
 TILE_SIZE: int = 18
 FRICTION: float = 0
 GRAVITY: float = 20
-
-colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple'}
 
 gamedir_path = Path(sys.argv[0]).resolve().parent
 
@@ -39,8 +38,12 @@ color_to_layer = {
     'gray': gray_layer,
 }
 
+scene_width = 900
+scene_height = 540
 
-scene = w2d.Scene()
+scene_camera_bounding_box = None
+
+scene = w2d.Scene(scene_width, scene_height)
 scene.background = (0.9, 0.9, 0.9)
 
 space = pymunk.Space()      # Create a Space which contain the simulation
@@ -144,7 +147,6 @@ class Positionable(typing.Protocol):
 physical_objects: dict[pymunk.Body: Positionable] = {}
 
 
-
 @contextmanager
 def physical(
     drawn: Positionable,
@@ -163,10 +165,6 @@ def physical(
         space.remove(body, *body.shapes)
         del physical_objects[body]
 
-
-# expressed in cells
-scene_width = 80
-scene_height = 40
 
 
 color_tile_maps = {}
@@ -337,6 +335,13 @@ class Player:
         self._standing_on_count = 0
         self.on_ground = w2d.Event()
 
+        self.cwbb = wasabigeom.Rect(
+            (-scene_width * 0.3) / TILE_SIZE, # l
+            (scene_width * 0.3) / TILE_SIZE, # r
+            (-scene_height * 0.3) / TILE_SIZE, # b
+            (scene_height * 0.3) / TILE_SIZE, # t
+            )
+
     def _add_floor(self):
         self._standing_on_count += 1
         self.on_ground.set()
@@ -364,8 +369,11 @@ class Player:
                 level.toggle_color(color)
 
     async def run(self, start_pos: vec2):
+        screen_pos = start_pos * TILE_SIZE
+        # we'll fix this before drawing in monitor_player_position
+        scene.camera.pos = screen_pos
         self.shape = scene.layers[sprite_layer].add_star(
-            pos=start_pos * TILE_SIZE,
+            pos=screen_pos,
             points=6,
             outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
         with physical(self.shape) as self.body:
@@ -405,7 +413,6 @@ class Player:
                 ns.cancel()
 
     async def monitor_player_position(self):
-        """Monitor the player's position."""
         async for _ in game_clock.coro.frames():
             # Although it's not explicitly guaranteed by wasabi2d
             # and its -> *async* <- coroutines, in fact this will
@@ -426,6 +433,79 @@ class Player:
             # (the player no longer stores its own position,
             #  it's only represented in PyMunk in tile space
             #  and onscreen in screen space)
+            #
+            # Imagine the worldspace (in tile coordinates)
+            # as a big rectangle.  Now imagine the screen is
+            # a window into that rectangle.
+            #
+            #    +-----------------------+
+            #    |world                  |
+            #    |  +------+             |
+            #    |  |screen|             |
+            #    |  |      |             |
+            #    |  +------+             |
+            #    |                       |
+            #    +-----------------------+
+            #
+            # There's a point at the dead center of the "screen",
+            # we're going to call the "camera".
+            #
+            # Under normal circumstances, during gameplay the
+            # player is moving.  There's an imaginary box around
+            # the player called the "camera weak bounding box" or
+            # cwbb.  When the player moves, the cwbb moves too,
+            # in exactly the same way.  If after moving, the camera
+            # is still inside the cwbb, nothing changes.  But if
+            # the camera is outside the cwbb, it's moved until
+            # it's inside, along either or both the X and Y axes.
+            #
+            # But if moving the camera there makes the screen
+            # extend past the edges of the world, the camera is
+            # then moved until the screen is inside the world,
+            # again along either or both the X and Y axes.
+            #
+            # When initially setting up the level, the camera
+            # is dropped on the player, and then the camera is
+            # moved if the screen extends past the edge of the world.
+            cwbb = self.cwbb.translate(pos)
+            camera = vec2(scene.camera.pos / TILE_SIZE)
+            # print(f"1. {cwbb=}")
+            # print(f"   {camera=}")
+            if not cwbb.contains(camera):
+                x, y = camera
+                if x < cwbb.l:
+                    x = cwbb.l
+                elif x > cwbb.r:
+                    x = cwbb.r
+                if y < cwbb.b:
+                    y = cwbb.b
+                elif y > cwbb.t:
+                    y = cwbb.t
+                camera = vec2(x, y)
+                # print(f"   adjusted to {camera}")
+
+            camera *= TILE_SIZE
+            # print(f"2. {scene_camera_bounding_box=}")
+            # print(f"  {camera=}")
+            if not scene_camera_bounding_box.contains(camera):
+                x, y = camera
+                if x < scene_camera_bounding_box.l:
+                    x = scene_camera_bounding_box.l
+                elif x > scene_camera_bounding_box.r:
+                    x = scene_camera_bounding_box.r
+                if y < scene_camera_bounding_box.b:
+                    y = scene_camera_bounding_box.b
+                elif y > scene_camera_bounding_box.t:
+                    y = scene_camera_bounding_box.t
+                camera = vec2(x, y)
+                # print(f"   adjusted to {camera}")
+
+            # print(f"3. final screen {camera=}")
+            scene.camera.pos = tuple(camera)
+
+            last_pos = pos
+
+
 
 
 async def drive_main_clock():
@@ -468,18 +548,17 @@ async def drive_main_clock():
 
 
 def init_level():
-    # global grid # , level
-    # cell = grid[x][y]
-    # isinstance(cell, list)
-    # grid = []
-
-    # for _ in range(scene_width + 1):
-    #     row = []
-    #     grid.append(row)
-    #     for __ in range(scene_height + 1):
-    #         row.append([])
-
     level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
+
+    level_size_in_screen = vec2(level.map_size) * TILE_SIZE
+
+    global scene_camera_bounding_box
+    scene_camera_bounding_box = wasabigeom.Rect(
+        scene_width / 2, # left
+        level_size_in_screen.x - (scene_width / 2), # right
+        scene_height / 2, # bottom
+        level_size_in_screen.y - (scene_height / 2), # top
+        )
 
     assert len(level.tilesets) == 1
     for value in level.tilesets.values():
