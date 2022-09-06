@@ -1,9 +1,11 @@
 import bisect
 import collections
 from contextlib import contextmanager
+import math
 from pathlib import Path
 import pymunk
 from pytiled_parser import parse_map
+import random
 import sys
 from typing import Any, Generator
 import typing
@@ -20,6 +22,10 @@ import pygame
 TILE_SIZE: int = 18
 FRICTION: float = 0
 GRAVITY: float = 20
+
+game = None
+level = None
+player = None
 
 gamedir_path = Path(sys.argv[0]).resolve().parent
 
@@ -143,8 +149,6 @@ class Positionable(typing.Protocol):
     pos: vec2
 
 
-physical_objects: dict[pymunk.Body: Positionable] = {}
-
 
 @contextmanager
 def physical(
@@ -158,11 +162,11 @@ def physical(
     body = create_body(drawn.pos / TILE_SIZE, mass=mass)
     try:
         with drawn:
-            physical_objects[body] = drawn
+            level.physical_objects[body] = drawn
             yield body
     finally:
         space.remove(body, *body.shapes)
-        del physical_objects[body]
+        del level.physical_objects[body]
 
 
 
@@ -201,15 +205,12 @@ class Block:
         level.color_to_shapes[color].append(self.shape)
 
 
-current_checkpoint = None
-
 
 class Checkpoint(Block):
     deselected_image = "pixel_platformer/tiles/tile_0128"
     selected_image = "pixel_platformer/tiles/tile_0129"
 
     def __init__(self, image, x, y=None, *, initial=False):
-        global current_checkpoint
         if (y is None) and isinstance(x, vec2):
             position = x
         else:
@@ -226,11 +227,10 @@ class Checkpoint(Block):
             self.on_touched()
 
     def on_touched(self):
-        global current_checkpoint
-        if current_checkpoint != self:
-            if current_checkpoint:
-                current_checkpoint.on_deselected()
-            current_checkpoint = self
+        if level.current_checkpoint != self:
+            if level.current_checkpoint:
+                level.current_checkpoint.on_deselected()
+            level.current_checkpoint = self
             self.sprite.image = self.selected_image
 
     def on_deselected(self):
@@ -247,7 +247,16 @@ class Collectable(Block):
         # grid[int(position.x)][int(position.y)].append(self)
         # tile_map = gray_tile_map
         # tile_map[x, y] = image
-        self.sprite = scene.layers[sprite_layer].add_sprite(image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+
+        self.wobble = random.random() * math.tau
+        self.wobble_range = 3 # in pixels
+        self.wobble_increment = 1/120 * math.tau
+        self.starting_pos = pos=self.pos * TILE_SIZE
+        self.sprite = scene.layers[sprite_layer].add_sprite(image, pos=self.starting_pos, anchor_x=0, anchor_y=0)
+        # set initial wobble
+        self.animate()
+        level.animated_objects.append(self)
+
         self.shape = create_static(position, sensor=True)
         self.shape.game_object = self
         level.collectables += 1
@@ -255,6 +264,14 @@ class Collectable(Block):
     def on_touched(self):
         level.collectables -= 1
         self.sprite.delete()
+
+    def animate(self):
+        self.wobble += self.wobble_increment
+        while self.wobble > math.tau:
+            self.wobble -= math.tau
+        pos = vec2(self.starting_pos.x, self.starting_pos.y + (self.wobble_range * math.sin(self.wobble)))
+        self.sprite.pos = pos
+
 
 
 def background_block(image, x, y=None):
@@ -294,11 +311,42 @@ game_clock = main_clock.create_sub_clock()
 
 
 class Level:
+
+    physical_objects: dict[pymunk.Body: Positionable]
+
     def __init__(self):
         self.color_state = {color: True for color in colors}
         self.color_to_shapes = {color: [] for color in colors}
 
         self.collectables = 0
+
+        self.current_checkpoint = None
+        self.physical_objects = {}
+        self.animated_objects = []
+
+
+    async def run_physics(self):
+        """Step the Pymunk physics simulation."""
+        async for dt in game_clock.coro.frames_dt():
+            space.step(dt)
+            for body, positionable in self.physical_objects.items():
+                positionable.pos = body.position * TILE_SIZE
+
+    async def animate(self):
+        async for dt in game_clock.coro.frames_dt():
+            for o in self.animated_objects:
+                o.animate()
+
+
+    async def run(self):
+        global player
+        level.load_map("test")
+        player = Player(controller=Controller())
+        async with w2d.Nursery() as ns:
+            ns.do(self.run_physics())
+            ns.do(self.animate())
+            ns.do(player.run(start_pos=self.current_checkpoint.pos))
+
 
     def toggle_color(self, color):
         old_state = self.color_state[color]
@@ -367,13 +415,13 @@ class Level:
                         initial = checkpoint == "selected"
                         block = Checkpoint(image, x, y, initial=initial)
                         if initial:
-                            current_checkpoint = block
+                            self.current_checkpoint = block
                     elif object_type == "gem":
                         block = Collectable(image, x, y)
                     else:
                         block = Block(color, image, x, y)
 
-        assert current_checkpoint, "no initial checkpoint set in map!"
+        assert self.current_checkpoint, "no initial checkpoint set in map!"
 
 
 
@@ -517,7 +565,7 @@ class Player:
             pos = self.body.position
             if pos.y >= death_plane:
                 # respawn!
-                pos = last_pos = current_checkpoint.pos
+                pos = last_pos = level.current_checkpoint.pos
                 scene.camera.pos = self.shape.pos = pos * TILE_SIZE
                 self.body.position = tuple(pos)
                 self.body.velocity = (0.0, 0.0)
@@ -674,30 +722,13 @@ async def pauser():
                 scene.layers[layer].clear_effect()
 
 
-async def run_physics():
-    """Step the Pymunk physics simulation."""
-    async for dt in game_clock.coro.frames_dt():
-        space.step(dt)
-        for body, positionable in physical_objects.items():
-            positionable.pos = body.position * TILE_SIZE
-
-
-async def run_level():
-    global level
-    global player
-    level = Level()
-    level.load_map("test")
-    player = Player(controller=Controller())
-    async with w2d.Nursery() as ns:
-        ns.do(run_physics())
-        ns.do(player.run(start_pos=current_checkpoint.pos))
-
-
 async def main():
+    global level
+    level = Level()
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
         ns.do(pauser())
-        ns.do(run_level())
+        ns.do(level.run())
 
 
 w2d.run(main())
