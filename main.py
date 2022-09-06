@@ -272,6 +272,31 @@ class Collectable(Block):
         pos = vec2(self.starting_pos.x, self.starting_pos.y + (self.wobble_range * math.sin(self.wobble)))
         self.sprite.pos = pos
 
+class Switch(Block):
+    def __init__(self, color, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        # grid[int(position.x)][int(position.y)].append(self)
+        # tile_map = gray_tile_map
+        # tile_map[x, y] = image
+
+        self.color = color
+        self.on_image = f"{color}_switch_on"
+        self.off_image = f"{color}_switch_off"
+
+        self.sprite = scene.layers[sprite_layer].add_sprite(self.on_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        # set initial wobble
+
+        self.shape = create_static(position, sensor=True)
+        self.shape.game_object = self
+
+    def on_touched(self):
+        new_state = level.toggle_color(self.color)
+        self.sprite.image = self.on_image if new_state else self.off_image
+
 
 
 def background_block(image, x, y=None):
@@ -350,7 +375,7 @@ class Level:
 
     def toggle_color(self, color):
         old_state = self.color_state[color]
-        new_state = not self.color_state[color]
+        new_state = not old_state
         self.color_state[color] = new_state
         scene.layers[color_to_layer[color]].visible = new_state
         scene.layers[color_to_layer[color] + 1].visible = old_state
@@ -359,6 +384,8 @@ class Level:
             space.remove(*self.color_to_shapes[color])
         else:
             space.add(*self.color_to_shapes[color])
+
+        return new_state
 
     def load_map(self, name):
         filename = f"level_{name}.tmx"
@@ -375,10 +402,17 @@ class Level:
             self.map_size_in_screen.y - (scene_height / 2), # top
             )
 
-        assert len(level_map.tilesets) == 1
-        for value in level_map.tilesets.values():
-            tileset = value
-            break
+        tiles = {}
+
+        offset = 0
+        for tileset in level_map.tilesets.values():
+            max_id = -1
+            for id, tile in tileset.tiles.items():
+                id += offset
+                # print(f"{tileset.name} {id} -> tile {tile.image}")
+                tiles[id] = tile
+                max_id = max(id, max_id)
+            offset = max_id
 
         empty_dict = {}
 
@@ -398,7 +432,7 @@ class Level:
                     if not tile_id:
                         continue
                     tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
-                    tile = tileset.tiles[tile_id]
+                    tile = tiles[tile_id]
                     image = tile.image
                     assert image
 
@@ -418,6 +452,8 @@ class Level:
                             self.current_checkpoint = block
                     elif object_type == "gem":
                         block = Collectable(image, x, y)
+                    elif object_type == "switch":
+                        block = Switch(color, x, y)
                     else:
                         block = Block(color, image, x, y)
 

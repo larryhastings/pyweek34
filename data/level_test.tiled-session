@@ -9,6 +9,11 @@
     ],
     "file.lastUsedOpenFilter": "All Files (*)",
     "fileStates": {
+        "/home/larry/src/pyweek34/images/Color Shatter.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
         "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx": {
             "dynamicWrapping": true,
             "scaleInDock": 1,
@@ -18,12 +23,12 @@
             "scale": 0.626736111111111,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": 1128.8642659279778,
-                "y": 525.7396121883658
+                "x": 900.6980609418284,
+                "y": 447.5567867036011
             }
         }
     },
-    "last.imagePath": "/home/larry/src/pyweek34/images/pixel_platformer_blocks/Tiles/Stone",
+    "last.imagePath": "/home/larry/src/pyweek34/images",
     "map.fixedSize": true,
     "map.height": 30,
     "map.lastUsedExportFilter": "Json map files (*.json)",
@@ -35,10 +40,12 @@
     "map.width": 80,
     "openFiles": [
         "level_test.tmx",
-        "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx"
+        "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx",
+        "/home/larry/src/pyweek34/images/Color Shatter.tsx"
     ],
     "project": "level_test.tiled-project",
     "recentFiles": [
+        "/home/larry/src/pyweek34/images/Color Shatter.tsx",
         "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx",
         "level_test.tmx"
     ],
