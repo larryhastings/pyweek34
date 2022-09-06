@@ -198,7 +198,7 @@ class Block:
 
         if color != 'gray':
             tile_map = color_off_tile_maps[color]
-            tile_map[x, y] = f"{color}_off"
+            tile_map[x, y] = f"{color}_off_40"
 
         self.shape = create_static(position)
         level.color_to_shapes[color].append(self.shape)
