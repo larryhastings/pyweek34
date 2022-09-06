@@ -203,6 +203,9 @@
   <image width="18" height="18" source="tiles/tile_0066.png"/>
  </tile>
  <tile id="79">
+  <properties>
+   <property name="object" value="gem"/>
+  </properties>
   <image width="18" height="18" source="tiles/tile_0067.png"/>
  </tile>
  <tile id="80">
@@ -388,12 +391,14 @@
  <tile id="140">
   <properties>
    <property name="checkpoint" value="selected"/>
+   <property name="object" value="checkpoint"/>
   </properties>
   <image width="18" height="18" source="tiles/tile_0128.png"/>
  </tile>
  <tile id="141">
   <properties>
    <property name="checkpoint" value="unselected"/>
+   <property name="object" value="checkpoint"/>
   </properties>
   <image width="18" height="18" source="tiles/tile_0129.png"/>
  </tile>

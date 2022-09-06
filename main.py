@@ -25,8 +25,8 @@ gamedir_path = Path(sys.argv[0]).resolve().parent
 
 colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'}
 
-layers = list(range(16))
-background_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, hud_layer, sprite_layer = layers
+layers = list(range(17))
+background_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, sprite_layer, player_layer, hud_layer, = layers
 
 color_to_layer = {
     'red': red_layer,
@@ -61,10 +61,9 @@ def on_player_collided(
 
     a, b = arbiter.shapes
 
-    if b.sensor:
-        assert hasattr(b, 'game_object')
-        o = b.game_object
-        o.on_touched()
+    game_object = getattr(b, "game_object", None)
+    if game_object:
+        game_object.on_touched()
 
     is_down = 89 < arbiter.normal.angle_degrees < 91
     if is_down:
@@ -196,7 +195,7 @@ class Block:
 
         if color != 'gray':
             tile_map = color_off_tile_maps[color]
-            tile_map[x, y] = f"{color}_off_40"
+            tile_map[x, y] = f"{color}_off_20"
 
         self.shape = create_static(position)
         level.color_to_shapes[color].append(self.shape)
@@ -238,16 +237,31 @@ class Checkpoint(Block):
         self.sprite.image = self.deselected_image
 
 
-class BackgroundBlock:
+class Collectable(Block):
     def __init__(self, image, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
         else:
             position = vec2(x, y)
         self.pos = position
+        # grid[int(position.x)][int(position.y)].append(self)
+        # tile_map = gray_tile_map
+        # tile_map[x, y] = image
+        self.sprite = scene.layers[sprite_layer].add_sprite(image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        self.shape = create_static(position, sensor=True)
+        self.shape.game_object = self
+        level.collectables += 1
 
-        tile_map = background_tile_map
-        tile_map[x, y] = image
+    def on_touched(self):
+        level.collectables -= 1
+        self.sprite.delete()
+
+
+def background_block(image, x, y=None):
+    if (y is None) and isinstance(x, vec2):
+        x, y = x
+    tile_map = background_tile_map
+    tile_map[x, y] = image
 
 
 actions = {
@@ -269,7 +283,6 @@ actions = {
     "toggle_purple",
     }
 
-level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
 
 cell_size = TILE_SIZE
 
@@ -285,6 +298,8 @@ class Level:
         self.color_state = {color: True for color in colors}
         self.color_to_shapes = {color: [] for color in colors}
 
+        self.collectables = 0
+
     def toggle_color(self, color):
         old_state = self.color_state[color]
         new_state = not self.color_state[color]
@@ -296,6 +311,69 @@ class Level:
             space.remove(*self.color_to_shapes[color])
         else:
             space.add(*self.color_to_shapes[color])
+
+    def load_map(self, name):
+        filename = f"level_{name}.tmx"
+        level_map = parse_map(gamedir_path.joinpath("data", filename))
+
+        self.map_size = vec2(level_map.map_size)
+        self.map_size_in_screen = self.map_size * TILE_SIZE
+
+        global scene_camera_bounding_box
+        scene_camera_bounding_box = wasabigeom.Rect(
+            scene_width / 2, # left
+            self.map_size_in_screen.x - (scene_width / 2), # right
+            scene_height / 2, # bottom
+            self.map_size_in_screen.y - (scene_height / 2), # top
+            )
+
+        assert len(level_map.tilesets) == 1
+        for value in level_map.tilesets.values():
+            tileset = value
+            break
+
+        empty_dict = {}
+
+        for layer in level_map.layers:
+            block_type_override = None
+            if layer.name == "Background":
+                scene_layer = scene.layers[background_layer]
+                block_type_override = background_block
+            elif layer.name == "Terrain":
+                scene_layer = scene.layers[gray_layer]
+            else:
+                assert None, "unhandled layer name"
+
+            for y, column in enumerate(layer.data):
+                for x, tile_id in enumerate(column):
+                    # print(f"{x=} {y=} {tile_id=}")
+                    if not tile_id:
+                        continue
+                    tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
+                    tile = tileset.tiles[tile_id]
+                    image = tile.image
+                    assert image
+
+                    if block_type_override:
+                        background_block(image, x, y)
+                        continue
+
+                    properties = tile.properties or empty_dict
+                    object_type = tile.properties.get("object", None)
+                    color = tile.properties.get("color", "gray")
+
+                    if object_type == "checkpoint":
+                        checkpoint = tile.properties.get("checkpoint", None)
+                        initial = checkpoint == "selected"
+                        block = Checkpoint(image, x, y, initial=initial)
+                        if initial:
+                            current_checkpoint = block
+                    elif object_type == "gem":
+                        block = Collectable(image, x, y)
+                    else:
+                        block = Block(color, image, x, y)
+
+        assert current_checkpoint, "no initial checkpoint set in map!"
 
 
 
@@ -335,11 +413,25 @@ class Player:
         self._standing_on_count = 0
         self.on_ground = w2d.Event()
 
+        # cwbb_factor defines how big the cwbb is around the player.
+        # the larger the number, the larger the cwbb.
+        #
+        # 1/6 means the camera can only move 1/6 of the screen
+        # away from the player before being constrained.
+        #
+        # 1 means it's the size of the entire viewport.
+        # 0 means it has zero size.
+        #
+        # you're encouraged to use a fraction.
+        cwbb_factor = 1/5
+
+        # cwbb_factor = (1 - cwbb_factor)
+        # cwbb is in screen coords
         self.cwbb = wasabigeom.Rect(
-            (-scene_width * 0.3) / TILE_SIZE, # l
-            (scene_width * 0.3) / TILE_SIZE, # r
-            (-scene_height * 0.3) / TILE_SIZE, # b
-            (scene_height * 0.3) / TILE_SIZE, # t
+            -scene_width  * cwbb_factor, # l
+            +scene_width  * cwbb_factor, # r
+            -scene_height * cwbb_factor, # b
+            +scene_height * cwbb_factor, # t
             )
 
     def _add_floor(self):
@@ -372,7 +464,7 @@ class Player:
         screen_pos = start_pos * TILE_SIZE
         # we'll fix this before drawing in monitor_player_position
         scene.camera.pos = screen_pos
-        self.shape = scene.layers[sprite_layer].add_star(
+        self.shape = scene.layers[player_layer].add_star(
             pos=screen_pos,
             points=6,
             outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
@@ -413,21 +505,22 @@ class Player:
                 ns.cancel()
 
     async def monitor_player_position(self):
+        death_plane = level.map_size.y
+        last_pos = self.body.position
         async for _ in game_clock.coro.frames():
             # Although it's not explicitly guaranteed by wasabi2d
             # and its -> *async* <- coroutines, in fact this will
             # always be run *after* run_physics() computes its
             # physics step for a given logical frame.
 
-            pos = self.body.position
-
             # check if the player has fallen below the death plane
-            if pos.y >= scene_height:
-                self.body.position = tuple(current_checkpoint.pos)
+            pos = self.body.position
+            if pos.y >= death_plane:
+                # respawn!
+                pos = last_pos = current_checkpoint.pos
+                scene.camera.pos = self.shape.pos = pos * TILE_SIZE
+                self.body.position = tuple(pos)
                 self.body.velocity = (0.0, 0.0)
-                self.shape.pos = self.body.position * TILE_SIZE
-                # print(f"{dir(self.body)=}")
-                continue
 
             # adjust camera based on self.body.position
             # (the player no longer stores its own position,
@@ -453,23 +546,44 @@ class Player:
             # Under normal circumstances, during gameplay the
             # player is moving.  There's an imaginary box around
             # the player called the "camera weak bounding box" or
-            # cwbb.  When the player moves, the cwbb moves too,
-            # in exactly the same way.  If after moving, the camera
-            # is still inside the cwbb, nothing changes.  But if
-            # the camera is outside the cwbb, it's moved until
-            # it's inside, along either or both the X and Y axes.
+            # cwbb.
             #
-            # But if moving the camera there makes the screen
-            # extend past the edges of the world, the camera is
-            # then moved until the screen is inside the world,
-            # again along either or both the X and Y axes.
+            # When the player moves, the cwbb moves in the
+            # same direction but twice as far.  This means the camera
+            # races ahead of the player, so you can see where you're
+            # going.
+            #
+            # If after moving, the camera is still inside the cwbb,
+            # that's fine.  But if the camera is now outside the cwbb,
+            # it's moved until it's inside, along either or both the
+            # X and Y axes.
+            #
+            # But then!  If the camera's new position would make the
+            # screen extend past the edges of the world, the camera
+            # is moved once more so that the screen remains inside
+            # the world, again along either or both the X and Y axes.
             #
             # When initially setting up the level, the camera
             # is dropped on the player, and then the camera is
             # moved if the screen extends past the edge of the world.
-            cwbb = self.cwbb.translate(pos)
-            camera = vec2(scene.camera.pos / TILE_SIZE)
-            # print(f"1. {cwbb=}")
+
+            delta = pos - last_pos
+
+            screen_pos = pos * TILE_SIZE
+            screen_delta = delta * TILE_SIZE
+
+            cwbb = self.cwbb.translate(screen_pos)
+            camera = scene.camera.pos
+
+            # print(f"0. {camera=}")
+
+            # move camera
+            camera_delta = (screen_delta * 2)
+            camera = camera + camera_delta
+            # print(f"   translate camera by {camera_delta=}")
+
+            # print(f"1. {screen_pos=}")
+            # print(f"   {cwbb=}")
             # print(f"   {camera=}")
             if not cwbb.contains(camera):
                 x, y = camera
@@ -484,9 +598,8 @@ class Player:
                 camera = vec2(x, y)
                 # print(f"   adjusted to {camera}")
 
-            camera *= TILE_SIZE
             # print(f"2. {scene_camera_bounding_box=}")
-            # print(f"  {camera=}")
+            # print(f"   {camera=}")
             if not scene_camera_bounding_box.contains(camera):
                 x, y = camera
                 if x < scene_camera_bounding_box.l:
@@ -501,7 +614,8 @@ class Player:
                 # print(f"   adjusted to {camera}")
 
             # print(f"3. final screen {camera=}")
-            scene.camera.pos = tuple(camera)
+            # print()
+            scene.camera.pos = camera
 
             last_pos = pos
 
@@ -547,58 +661,6 @@ async def drive_main_clock():
             next_tick_fractional = tick_offsets[next_tick_index]
 
 
-def init_level():
-    level = parse_map(gamedir_path.joinpath("data", "level_test.tmx"))
-
-    level_size_in_screen = vec2(level.map_size) * TILE_SIZE
-
-    global scene_camera_bounding_box
-    scene_camera_bounding_box = wasabigeom.Rect(
-        scene_width / 2, # left
-        level_size_in_screen.x - (scene_width / 2), # right
-        scene_height / 2, # bottom
-        level_size_in_screen.y - (scene_height / 2), # top
-        )
-
-    assert len(level.tilesets) == 1
-    for value in level.tilesets.values():
-        tileset = value
-        break
-
-    for layer in level.layers:
-        if layer.name == "Background":
-            scene_layer = scene.layers[background_layer]
-        elif layer.name == "Terrain":
-            scene_layer = scene.layers[gray_layer]
-        else:
-            assert None, "unhandled layer name"
-
-        for y, column in enumerate(layer.data):
-            for x, tile_id in enumerate(column):
-                # print(f"{x=} {y=} {tile_id=}")
-                if not tile_id:
-                    continue
-                tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
-                tile = tileset.tiles[tile_id]
-                if tile.properties:
-                    checkpoint = tile.properties.get("checkpoint", None)
-                    color = tile.properties.get("color", None)
-                else:
-                    checkpoint = color = None
-                image = tile.image
-                assert image
-                if checkpoint:
-                    initial = checkpoint == "selected"
-                    block = Checkpoint(image, x, y, initial=initial)
-                    if initial:
-                        current_checkpoint = block
-                elif color:
-                    block = Block(color, image, x, y)
-                else:
-                    block = BackgroundBlock(image, x, y)
-
-    assert current_checkpoint, "no initial checkpoint set in map!"
-
 
 async def pauser():
    while True:
@@ -624,7 +686,7 @@ async def run_level():
     global level
     global player
     level = Level()
-    init_level()
+    level.load_map("test")
     player = Player(controller=Controller())
     async with w2d.Nursery() as ns:
         ns.do(run_physics())
