@@ -1,0 +1,3 @@
+[tool.mypy]
+files = ["collision.py", "main.py"]
+mypy_path = ["typings"]
