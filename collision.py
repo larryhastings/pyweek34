@@ -36,6 +36,11 @@ from math import ceil, floor, inf, modf, nextafter
 import wasabigeom
 from wasabigeom import vec2
 
+
+vec2_0_1 = vec2(0, 1)
+vec2_1_0 = vec2(1, 1)
+vec2_1_1 = vec2(1, 1)
+
 class GridCollider:
     def __init__(self, size):
         size = vec2(size)
@@ -94,23 +99,45 @@ class GridCollider:
         #   if your position is 18.0, you're aligned.
         #   if your position is 18.anything-but-zero, you're not aligned.
         #
-        positions = None
-        x_aligned = 0 if modf(pos.x)[0] else 1
-        y_aligned = 0 if modf(pos.y)[0] else 1
-        if (pawn.size.x <= 1) and (pawn.size.y <= 1) and x_aligned and y_aligned:
-            return self.grid[pos]
-
-        # either the pawn is larger than one tile,
-        # or it's not axis aligned.
-        # either way we need to check an (m x n) grid of tiles.
-        pos = vec2(floor(pos.x), floor(pos.y))
+        x_fraction, x_integer = modf(pos.x)
+        y_fraction, y_integer = modf(pos.y)
+        pos_cell_coord = vec2(x_integer, y_integer)
+        x_aligned = 0 if x_fraction else 1
+        y_aligned = 0 if y_fraction else 1
         hits = []
-        for y in range(ceil(pawn.size.y) + (not y_aligned)):
-            for x in range(ceil(pawn.size.x) + (not x_aligned)):
-                test = pos + vec2(x, y)
-                tiles = self.grid[test]
+        append = hits.append
+
+        if (pawn.size.x <= 1) and (pawn.size.y <= 1) and x_aligned and y_aligned:
+            # super-optimized code path
+            return self.grid[pos_cell_coord]
+        elif (pawn.size.x == 1) and (pawn.size.y == 1):
+            # somewhat optimized code path
+            tiles = self.grid[pos_cell_coord]
+            if tiles:
+                append(tiles)
+            pos_cell_coord_offset = pos_cell_coord + vec2_1_1
+            if not x_aligned:
+                tiles = self.grid[pos_cell_coord + vec2_1_0]
                 if tiles:
-                    hits.append(tiles)
+                    append(tiles)
+            if not y_aligned:
+                tiles = self.grid[pos_cell_coord + vec2_0_1]
+                if tiles:
+                    append(tiles)
+                if not x_aligned:
+                    tiles = self.grid[pos_cell_coord + vec2_1_1]
+                    if tiles:
+                        append(tiles)
+        else:
+            # non-optimized code path.
+            # we need to check an (m x n) grid of tiles.
+            for y in range(ceil(pawn.size.y) + (not y_aligned)):
+                for x in range(ceil(pawn.size.x) + (not x_aligned)):
+                    test_coord = pos_cell_coord + vec2(x, y)
+                    tiles = self.grid[test_coord]
+                    if tiles:
+                        append(tiles)
+
         if not hits:
             return None
         # this is the fastest way to flatten a list of tuples.
@@ -414,19 +441,19 @@ if __name__ == "__main__":
         if (got_t == expected_t) and (got_pos == expected_pos) and (set(got_hits) == set(expected_hits)):
             return
 
-        sys.exit(f"Failure in test_collide_pawn test {local_tests_run}:\n        pawn: {pawn}\n    expected: {expected}\n         got: {got}")
+        sys.exit(f"Failure in test_collide_moving_pawn test {local_tests_run}:\n        pawn: {pawn}\n       delta: {delta}\n    expected: {expected}\n         got: {got}")
 
     pawn.pos = vec2(14, 19)
     delta = vec2(2, 2)
     pawn.size = vec2_1_1
     test_collide_moving_pawn(pawn, delta,
-        (1.7763568394002505e-15, vec2(14.000000000000004, 19.000000000000004), [tile_15_20])
+        (8.881784197001252e-16, vec2(14.000000000000002, 19.0), [tile_15_20])
         )
 
     pawn.pos = vec2(13, 20)
     delta = vec2(3, 0.5)
     test_collide_moving_pawn(pawn, delta,
-        (0.3333333333333339, vec2(14.000000000000002, 20.166666666666668), [tile_15_20, tile_15_21])
+        (0.3333333333333339, vec2(14.000000000000002, 20.166666666666668), [tile_15_21, tile_15_21])
         )
 
     pawn.pos = vec2(15, 23)
