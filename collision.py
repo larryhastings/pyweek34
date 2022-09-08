@@ -10,6 +10,8 @@
 ##    A "grid" is the entire area we do collision for.
 ##    A "cell" is an individual square on the grid.  Cells can contain tiles.
 ##    A "tile" is an object placed on the grid, *in* a particular cell.
+##    A "point" is a movable object of zero size that doesn't live in the grid.
+##       You ask the grid "is this pawn colliding with anything?"
 ##    A "pawn" is a movable object that doesn't live in the grid.  You ask
 ##       the grid "is this pawn colliding with anything?"
 ##
@@ -29,6 +31,18 @@
 ##    and it's exactly 1 tile wide and 1 tile tall,
 ##    it does *not* collide with tiles in cells at
 ##      (0, 1), (1, 0), or (1, 1).
+##    The point pawn.pos + pawn.size is *not* considered
+##    to be inside the pawn.
+##
+##    for a point, you simply look up what tiles are in
+##    the cell at that position, ignoring the fractional
+##    part of the x and y coordinates.  the points
+##        (0.0, 0.0),
+##        (0.1, 0.1),
+##        (0.0, 0.5),
+##        (0.5, 0.0), and
+##        (0.99999, 0.9999)
+##    are all only checked for collision with the cell at (0, 0).
 ##
 from collections import defaultdict
 from math import ceil, floor, inf, modf, nextafter
@@ -36,7 +50,7 @@ from wasabigeom import vec2
 from typing import Protocol, TypeVar, Generic, Union, Optional, Sequence, overload
 
 
-vec2_zero = vec2(0, 0)
+vec2_0_0 = vec2_zero = vec2(0, 0)
 vec2_0_1  = vec2(0, 1)
 vec2_1_0  = vec2(1, 0)
 vec2_1_1  = vec2(1, 1)
@@ -104,6 +118,91 @@ class GridCollider(Generic[T]):
         result2 = tile in self.grid[pos]
         assert result == result2
         return result
+
+    def collide_point(self, pos):
+        return self.grid[vec2(modf(pos.x)[1], modf(pos.y)[1])]
+
+    def collide_moving_point(self, pos, delta):
+        # todo:
+        # maybe rewrite this someday with bresenham's line algorithm
+
+        def t_and_aligned_coord_tuples(start, delta, yield_value):
+            fractional, integer = modf(start)
+            edge_aligned = 0 if fractional else 1
+            yield (0, vec2_0_0)
+
+            if not delta:
+                return
+
+            sign = 1 if delta > 0 else -1
+
+            coord = integer
+            while True:
+                coord = coord + sign
+
+                # find the lowest time t such that
+                #     start + (delta * t) >= next_coord
+                t = (coord - start) / delta
+                if t > 1:
+                    break
+
+                # make sure it's properly reversible
+                coord_at_time_t = start + (delta * t)
+
+                # print(f"      {coord=} {next_coord=} {t=} {coord_at_time_t=}")
+
+                assert coord_at_time_t >= coord
+
+                yield (t, yield_value)
+
+        x_iterator = t_and_aligned_coord_tuples(pos.x, delta.x, vec2_1_0)
+        y_iterator = t_and_aligned_coord_tuples(pos.y, delta.y, vec2_0_1)
+
+        cell_pos = vec2(modf(pos.x)[1], modf(pos.y)[1])
+        x = None
+        y = None
+        previous = None
+        while True:
+            if x is None:
+                try:
+                    x = next(x_iterator)
+                except StopIteration:
+                    pass
+
+            if y is None:
+                try:
+                    y = next(y_iterator)
+                except StopIteration:
+                    if x is None:
+                        return
+
+            # print(f"loop:\n  {x=}\n\n  {y=}\n\n  {bool(x) and bool(y)=}\n")
+            if bool(x) and bool(y):
+                if x[0] == y[0]:
+                    value = (x[0], x[1] + y[1])
+                    x = None
+                    y = None
+                elif x[0] < y[0]:
+                    value = x
+                    x = None
+                else:
+                    value = y
+                    y = None
+            elif x:
+                value = x
+                x = None
+            elif y:
+                value = y
+                y = None
+            else:
+                return
+
+            t, cell_pos_delta = value
+            cell_pos += cell_pos_delta
+            hits = self.grid[cell_pos]
+            if hits:
+                new_pos = pos + (delta * t)
+                yield (t, new_pos, hits)
 
     @overload
     def collide_pawn(self, pawn: AbstractPositionedPawn) -> Optional[Sequence[T]]:
@@ -288,6 +387,7 @@ class GridCollider(Generic[T]):
 
         candidates = []
 
+
         def check_moving_pawn_along_one_coordinate(start, scalar_delta):
             assert scalar_delta
             if scalar_delta > 0:
@@ -434,6 +534,12 @@ if __name__ == "__main__":
         def __repr__(self):
             return f"<Tile {self.id:02} pos={self.pos}>"
 
+        def __eq__(self, other):
+            return isinstance(other, Tile) and (self.pos == other.pos)
+
+        def __hash__(self):
+            return hash(self.pos)
+
     local_tests_run = 0
     global_tests_run = 0
 
@@ -447,54 +553,44 @@ if __name__ == "__main__":
         def __str__(self):
             return self.s
 
+    def make_tile_pretty(tile):
+        if tile in tile_names:
+            return raw_string(tile_names[tile])
+        return tile
+
     def make_hits_pretty(hits):
         if not hits:
             return str(hits)
         hits = list(hits)
         hits.sort(key=lambda tile: tile.id)
-        hits = [raw_string(f"{tile_names[tile]}") for tile in hits]
+        hits = [make_tile_pretty(tile) for tile in hits]
         return hits
 
     def make_result_tuple_pretty(t):
         if not t:
             return "None"
-        hits = make_hits_pretty(t[2])
-        return (t[0], t[1], hits)
+        return (t[0], make_tile_pretty(t[1]), make_hits_pretty(t[2]))
 
     def failure_print(*a):
         failure_text.append("".join(str(o) for o in a))
 
+    def failure_print_list_of_tuples(l):
+        failure_print(f"              [")
+        for o in l:
+            failure_print(f"              {make_result_tuple_pretty(o)},")
+        failure_print(f"              ]")
+
     def failure_exit():
-        sys.exit("\n".join(failure_text))
-
-    def failure_clear():
+        text = "\n".join(failure_text)
         failure_text.clear()
+        sys.exit(text)
 
-    def test_collide_pawn(pawn, expected, *, pos=None):
-        global local_tests_run
-        local_tests_run += 1
-        global global_tests_run
-        global_tests_run += 1
-
-        got = grid.collide_pawn(pawn, pos=pos)
-
-        if (got == None) and (expected == None):
-            return
-
-        got_set = set(got) if got else set()
-        expected_set = set(expected) if expected else set()
-        if got_set == expected_set:
-            return
-
-        failure_print()
-        failure_print(f"Failure in test_collide_pawn test {local_tests_run}:")
-        failure_print(f"        pawn: {pawn}")
-        failure_print(f"    expected: {expected}")
-        failure_print(f"         got: {make_hits_pretty(got)}")
-        failure_exit()
 
 
     grid: GridCollider[Tile] = GridCollider(vec2(200, 100))
+
+    vec2_2_2 = vec2(2, 2)
+    vec2_3_3 = vec2(3, 3)
 
     tile_names = {}
 
@@ -523,12 +619,65 @@ if __name__ == "__main__":
     tile_names[tile_17_21] = "tile_17_21"
 
 
-    vec2_1_1 = vec2(1, 1)
-    vec2_2_2 = vec2(2, 2)
-    vec2_3_3 = vec2(3, 3)
+
+    local_tests_run = 0
+    def test_collide_point(pos, expected):
+        global local_tests_run
+        local_tests_run += 1
+        global global_tests_run
+        global_tests_run += 1
+
+        got = grid.collide_point(pos)
+
+        if (got == None) and (expected == None):
+            return
+
+        got_set = set(got) if got else set()
+        expected_set = set(expected) if expected else set()
+        if got_set == expected_set:
+            return
+
+        failure_print()
+        failure_print(f"Failure in test_collide_point test {local_tests_run}:")
+        failure_print(f"         pos: {pos}")
+        failure_print(f"    expected: {make_hits_pretty(expected)}")
+        failure_print(f"         got: {make_hits_pretty(got)}")
+        failure_exit()
+
+    test_collide_point(vec2(10, 10), ())
+    test_collide_point(vec2(14.9, 20), ())
+    test_collide_point(vec2(15, 20), (tile_15_20,))
+    test_collide_point(vec2(16, 21), (tile_16_21,))
+    test_collide_point(vec2(16.5, 21.5), (tile_16_21,))
+    test_collide_point(vec2(17.9999, 21.9999), (tile_17_21,))
+
+
+
+    local_tests_run = 0
+    def test_collide_pawn(pawn, expected, *, pos=None):
+        global local_tests_run
+        local_tests_run += 1
+        global global_tests_run
+        global_tests_run += 1
+
+        got = grid.collide_pawn(pawn, pos=pos)
+
+        if (got == None) and (expected == None):
+            return
+
+        got_set = set(got) if got else set()
+        expected_set = set(expected) if expected else set()
+        if got_set == expected_set:
+            return
+
+        failure_print()
+        failure_print(f"Failure in test_collide_pawn test {local_tests_run}:")
+        failure_print(f"        pawn: {pawn}")
+        failure_print(f"    expected: {make_hits_pretty(expected)}")
+        failure_print(f"         got: {make_hits_pretty(got)}")
+        failure_exit()
 
     pawn = Pawn(vec2(10, 10), vec2_1_1)
-
     test_collide_pawn(pawn, ())
 
     pawn.pos = tile_15_20.pos
@@ -538,7 +687,7 @@ if __name__ == "__main__":
         pawn.pos = tile_15_20.pos
         test_collide_pawn(pawn, (tile_15_20,tile_16_20))
     except SystemExit:
-        failure_clear()
+        pass
 
     pawn.pos = vec2(tile_15_20.pos.x - 0.2, tile_15_20.pos.y - 0.2)
     test_collide_pawn(pawn, (tile_15_20,))
@@ -572,8 +721,58 @@ if __name__ == "__main__":
     test_collide_pawn(pawn, ({tile_15_20, tile_15_21, tile_16_20, tile_16_21}))
 
 
-    local_tests_run = 0
 
+    local_tests_run = 0
+    def test_collide_moving_point_all_results(pos, delta, expected):
+        global local_tests_run
+        local_tests_run += 1
+        global global_tests_run
+        global_tests_run += 1
+
+        got = [(x[0], x[1], set(x[2])) for x in grid.collide_moving_point(pos, delta)]
+        expected = [(x[0], x[1], set(x[2])) for x in expected]
+
+        if got == expected:
+            return
+
+        failure_print(f"Failure in test_collide_moving_point_all_results test {local_tests_run}:")
+        failure_print(f"         pos: {pos}")
+        failure_print(f"       delta: {delta}")
+        failure_print(f"    expected:")
+        failure_print_list_of_tuples(expected)
+        failure_print(f"         got:")
+        failure_print_list_of_tuples(got)
+        failure_exit()
+
+    test_collide_moving_point_all_results(vec2(14, 19), vec2(20, 0), ())
+
+    test_collide_moving_point_all_results(vec2(14, 19), vec2(0, 20), ())
+
+    test_collide_moving_point_all_results(vec2(14, 20), vec2(4, 0),
+        [
+        (0.25, vec2(15, 20), [tile_15_20]),
+        (0.5 , vec2(16, 20), [tile_16_20]),
+        (0.75, vec2(17, 20), [tile_17_20]),
+        ]
+        )
+
+    test_collide_moving_point_all_results(vec2(14, 19), vec2(3, 3),
+        [
+        (0.3333333333333333, vec2(15, 20), [tile_15_20]),
+        (0.6666666666666666, vec2(16, 21), [tile_16_21]),
+        ]
+        )
+
+    test_collide_moving_point_all_results(vec2(14.5, 19.5), vec2(2, 3),
+        [
+        (0.25, vec2(15.0, 20.25), [tile_15_20]),
+        (0.5, vec2(15.5, 21.0), [tile_15_21]),
+        (0.75, vec2(16.0, 21.75), [tile_16_21]),
+        ]
+        )
+
+
+    local_tests_run = 0
     def test_collide_moving_pawn_first_result(pawn, delta, expected, *, pos=None):
         global local_tests_run
         local_tests_run += 1
@@ -600,8 +799,9 @@ if __name__ == "__main__":
 
         failure_print(f"Failure in test_collide_moving_pawn_first_result test {local_tests_run}:")
         failure_print(f"        pawn: {pawn}")
+        failure_print(f"         pos: {pos}")
         failure_print(f"       delta: {delta}")
-        failure_print(f"    expected: {expected}")
+        failure_print(f"    expected: {make_hits_pretty(expected)}")
         failure_print(f"         got: {make_hits_pretty(got)}")
         failure_exit()
 
@@ -625,6 +825,8 @@ if __name__ == "__main__":
         (0.5000000000000018, vec2(15.500000000000002, 21.999999999999996), [tile_15_21, tile_16_21, tile_17_21])
         )
 
+
+
     local_tests_run = 0
     def test_collide_moving_pawn_all_results(pawn, delta, expected, *, pos=None):
         global local_tests_run
@@ -640,13 +842,12 @@ if __name__ == "__main__":
 
         failure_print(f"Failure in test_collide_moving_pawn_all_results test {local_tests_run}:")
         failure_print(f"        pawn: {pawn}")
+        failure_print(f"         pos: {pos}")
         failure_print(f"       delta: {delta}")
-        failure_print(f"    expected: {expected}")
+        failure_print(f"    expected:")
+        failure_print_list_of_tuples(expected)
         failure_print(f"         got:")
-        failure_print(f"              [")
-        for o in got:
-            failure_print(f"              ", make_result_tuple_pretty(o))
-        failure_print(f"              ]")
+        failure_print_list_of_tuples(got)
         failure_exit()
 
     pawn.pos = vec2(14, 19)
