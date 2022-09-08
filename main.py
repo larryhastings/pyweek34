@@ -463,11 +463,13 @@ class Player:
 
             delta = 0.5 * (u + self.v) * dt
 
-            if collision := level.collision_grid.collide_moving_pawn(
+            collisions = level.collision_grid.collide_moving_pawn(
                 self,
                 delta,
                 pos=pos
-            ):
+            )
+            for collision in collisions:
+                print("COLLIISION IT IS", collision, type(collision))
                 t, pos, hit = collision
                 print(f"collided with {hit} at {pos}")
                 for tile in hit:
