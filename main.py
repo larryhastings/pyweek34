@@ -450,10 +450,19 @@ class Player:
 
     TERMINAL_VELOCITY = 100.0
 
+    @property
+    def pos(self) -> vec2:
+        """Get the position of the player in tile coordinates."""
+        return self.shape.pos / TILE_SIZE
+
+    @pos.setter
+    def pos(self, v: vec2):
+        """Get the position of the player in tile coordinates."""
+        self.shape.pos = v * TILE_SIZE
+
     async def run_physics(self):
         dt = 1/60
         async for _ in game_clock.coro.frames():
-            pos = self.shape.pos
             u = self.v
 
             v = u + self.GRAVITY * dt
@@ -463,26 +472,18 @@ class Player:
 
             delta = 0.5 * (u + self.v) * dt
 
-            collisions = level.collision_grid.collide_moving_pawn(
+            for t, pos, hit in level.collision_grid.collide_moving_pawn(
                 self,
                 delta,
-                pos=pos
-            )
-            for collision in collisions:
-                print("COLLIISION IT IS", collision, type(collision))
-                t, pos, hit = collision
-                print(f"collided with {hit} at {pos}")
+                pos=self.pos
+            ):
                 for tile in hit:
-                    sep = tile.pos - pos
-                    print(sep.angle())
+                    self.pos = pos
+                    sep: vec2 = tile.pos - self.pos
+                    #if abs(sep.y - 0.5) < 1e-3:
+                    self.v = vec2(self.v.x, 0)
             else:
-                pos = pos + delta
-
-            self.shape.pos = pos
-
-            # death plane
-            if pos.y >= self.DEATH_PLANE:
-                self.nursery.cancel()
+                self.pos += delta
 
     async def monitor_player_position(self):
         death_plane = level.map_size.y
@@ -494,7 +495,7 @@ class Player:
             # physics step for a given logical frame.
 
             # check if the player has fallen below the death plane
-            pos = self.shape.pos
+            pos = self.shape.pos / TILE_SIZE
             if pos.y >= death_plane:
                 # respawn!
                 self.nursery.cancel()
