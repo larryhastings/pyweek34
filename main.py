@@ -130,37 +130,47 @@ class Checkpoint(Block):
 
 
 class Collectable(Block):
-    def __init__(self, image, x, y=None):
+    nursery: w2d.Nursery
+
+    def __init__(self, image: str, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
         else:
             position = vec2(x, y)
+
+        self.image = image
         self.pos = position
-        # grid[int(position.x)][int(position.y)].append(self)
-        # tile_map = gray_tile_map
-        # tile_map[x, y] = image
-
-        self.wobble = random.random() * math.tau
-        self.wobble_range = 3 # in pixels
-        self.wobble_increment = 1/120 * math.tau
-        self.starting_pos = pos=self.pos * TILE_SIZE
-        self.sprite = scene.layers[sprite_layer].add_sprite(image, pos=self.starting_pos, anchor_x=0, anchor_y=0)
-        # set initial wobble
-        self.animate()
-        level.animated_objects.append(self)
-
-        level.collectables += 1
 
     def on_touched(self):
-        level.collectables -= 1
-        self.sprite.delete()
+        self.nursery.cancel()
 
-    def animate(self):
-        self.wobble += self.wobble_increment
-        while self.wobble > math.tau:
-            self.wobble -= math.tau
-        pos = vec2(self.starting_pos.x, self.starting_pos.y + (self.wobble_range * math.sin(self.wobble)))
-        self.sprite.pos = pos
+    async def run(self):
+        with scene.layers[sprite_layer].add_sprite(
+            self.image,
+            pos=self.pos * TILE_SIZE,
+            anchor_x=0,
+            anchor_y=0
+        ) as sprite:
+            level.collectables += 1
+            try:
+                async with w2d.Nursery() as self.nursery:
+                    self.nursery.do(floating_wobble(sprite))
+            finally:
+                level.collectables -= 1
+
+
+async def floating_wobble(
+    sprite,
+    *,
+    speed: float = 10.0,
+    pixels: float = 3.0,
+):
+    phase = random.random() * math.tau
+    wobble_range = vec2(0, pixels)
+    starting_pos = sprite.pos
+
+    async for t in game_clock.coro.frames():
+        sprite.pos = starting_pos + wobble_range * math.sin(speed * t + phase)
 
 
 class Switch(Block):
@@ -231,22 +241,16 @@ class Level:
 
         self.current_checkpoint = None
         self.physical_objects = {}
-        self.animated_objects = []
 
         self.collision_grid = collision.GridCollider((1000, 1000))
 
-    async def animate(self):
-        async for dt in game_clock.coro.frames_dt():
-            for o in self.animated_objects:
-                o.animate()
-
-
     async def run(self):
         global player
-        level.load_map("test")
-        async with w2d.Nursery() as ns:
-            ns.do(self.animate())
-            ns.do(run_lives())
+        objects = self.load_map("test")
+        async with w2d.Nursery() as self.nursery:
+            for obj in objects:
+                self.nursery.do(obj.run())
+            self.nursery.do(run_lives())
 
     def toggle_color(self, color):
         old_state = self.color_state[color]
@@ -293,6 +297,7 @@ class Level:
 
         empty_dict = {}
 
+        objects = []
         for layer in level_map.layers:
             block_type_override = None
             if layer.name == "Background":
@@ -333,8 +338,11 @@ class Level:
                         block = Switch(color, x, y)
                     else:
                         block = Block(color, image, x, y)
+                    if hasattr(block, 'run'):
+                        objects.append(block)
 
         assert self.current_checkpoint, "no initial checkpoint set in map!"
+        return objects
 
 
 
@@ -667,7 +675,6 @@ async def drive_main_clock():
                 fractional -= 1
                 next_tick_seconds += 1
             next_tick_fractional = tick_offsets[next_tick_index]
-
 
 
 async def pauser():
