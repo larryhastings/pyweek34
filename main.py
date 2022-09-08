@@ -462,6 +462,7 @@ class Player:
 
     async def run_physics(self):
         dt = 1/60
+        tick = 0
         async for _ in game_clock.coro.frames():
             u = self.v
 
@@ -471,19 +472,22 @@ class Player:
             self.v = v
 
             delta = 0.5 * (u + self.v) * dt
+            # print(f"[{tick:06}] {self.pos=} {self.v=} {delta=}:")
 
             for t, pos, hit in level.collision_grid.collide_moving_pawn(
                 self,
                 delta,
-                pos=self.pos
             ):
+                # print(f"[{tick:06}] collision at {t=} {pos=}:")
                 for tile in hit:
-                    self.pos = pos
-                    sep: vec2 = tile.pos - self.pos
-                    #if abs(sep.y - 0.5) < 1e-3:
+                    t_just_barely_before_the_collision = math.nextafter(t, -math.inf)
+                    self.pos = self.pos + (delta * t_just_barely_before_the_collision)
                     self.v = vec2(self.v.x, 0)
+                break
             else:
                 self.pos += delta
+
+            tick = tick + 1
 
     async def monitor_player_position(self):
         death_plane = level.map_size.y
