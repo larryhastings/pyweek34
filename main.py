@@ -1,13 +1,11 @@
 import bisect
-import collections
-from contextlib import contextmanager
 import math
 from pathlib import Path
-import pymunk
+import collision
 from pytiled_parser import parse_map
 import random
 import sys
-from typing import Any, Generator
+from typing import Any
 import typing
 import wasabi2d.loop
 from wasabi2d.clock import Clock
@@ -52,17 +50,10 @@ scene_camera_bounding_box = None
 scene = w2d.Scene(scene_width, scene_height)
 scene.background = (0.9, 0.9, 0.9)
 
-space = pymunk.Space()      # Create a Space which contain the simulation
-space.gravity = 0, GRAVITY      # Set its gravity
-
 
 def on_player_collided(
-    arbiter: pymunk.Arbiter,
-    space: pymunk.Space,
-    data: Any,
+    a: 'Player', b
 ) -> bool:
-    a, b = arbiter.shapes
-
     game_object = getattr(b, "game_object", None)
     if game_object:
         game_object.on_touched()
@@ -76,92 +67,6 @@ def on_player_collided(
     return True
 
 
-def on_player_separate(
-    arbiter: pymunk.Arbiter,
-    space: pymunk.Space,
-    data: Any,
-) -> bool:
-    return True
-
-
-COLLISION_TYPE_PLAYER = 1
-player_collision = space.add_wildcard_collision_handler(COLLISION_TYPE_PLAYER)
-player_collision.begin = on_player_collided
-player_collision.separate = on_player_separate
-
-
-def create_body(
-    pos: vec2,
-    size: tuple[int, int] = (1, 1),
-    mass: float = 10.0
-) -> pymunk.Body:
-    """Create a square dynamic body."""
-    body = pymunk.Body(mass, float('inf'))
-    body.position = tuple(pos + vec2(size) / 2)
-
-    poly = pymunk.Poly.create_box(
-        body,
-        size=size,
-        radius=0.2,
-    )
-    poly.friction = FRICTION
-    poly.elasticity = 0
-    space.add(body, poly)
-    return body
-
-
-def create_static(
-    pos: vec2,
-    size: tuple[int, int] = (1, 1),
-    *,
-    sensor=False
-) -> pymunk.Shape:
-    """Create a static body centred at the given position."""
-    hw, hh = vec2(size) / 2
-
-    # There's no way to position a pymunk shape after creation so we create it
-    # at the position we want it
-    coords = [
-        pos + vec2(hw, hh),
-        pos + vec2(hw, -hh),
-        pos + vec2(-hw, -hh),
-        pos + vec2(-hw, hh),
-    ]
-    poly = pymunk.Poly(space.static_body, [tuple(c) for c in coords])
-    if sensor:
-        poly.sensor = True
-    else:
-        poly.friction = FRICTION
-        poly.elasticity = 0
-
-    space.add(poly)
-    return poly
-
-
-class Positionable(typing.Protocol):
-    pos: vec2
-
-
-
-@contextmanager
-def physical(
-    drawn: Positionable,
-    mass: float = 10,
-) -> Generator[pymunk.Body, None, None]:
-    """Treat an object as physical within the context.
-
-    Yield a body on which to apply forces/impulses etc.
-    """
-    body = create_body(drawn.pos / TILE_SIZE, mass=mass)
-    try:
-        with drawn:
-            level.physical_objects[body] = drawn
-            yield body
-    finally:
-        space.remove(body, *body.shapes)
-        del level.physical_objects[body]
-
-
 color_tile_maps = {}
 color_off_tile_maps = {}
 
@@ -170,8 +75,6 @@ for color, layer in color_to_layer.items():
     if color != 'gray':
         color_off_tile_maps[color] = scene.layers[layer + 1].add_tile_map()
         scene.layers[layer + 1].visible = False
-
-
 
 
 class Block:
@@ -193,9 +96,8 @@ class Block:
             tile_map = color_off_tile_maps[color]
             tile_map[x, y] = f"{color}_off_20"
 
-        self.shape = create_static(position)
-        level.color_to_shapes[color].append(self.shape)
-
+        level.collision_grid.add(self)
+        level.color_to_shapes[color].append(self)
 
 
 class Checkpoint(Block):
@@ -212,8 +114,6 @@ class Checkpoint(Block):
         # tile_map = gray_tile_map
         # tile_map[x, y] = image
         self.sprite = scene.layers[gray_layer].add_sprite(self.deselected_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
-        self.shape = create_static(position, sensor=True)
-        self.shape.game_object = self
 
         if initial:
             self.on_touched()
@@ -249,8 +149,6 @@ class Collectable(Block):
         self.animate()
         level.animated_objects.append(self)
 
-        self.shape = create_static(position, sensor=True)
-        self.shape.game_object = self
         level.collectables += 1
 
     def on_touched(self):
@@ -263,6 +161,7 @@ class Collectable(Block):
             self.wobble -= math.tau
         pos = vec2(self.starting_pos.x, self.starting_pos.y + (self.wobble_range * math.sin(self.wobble)))
         self.sprite.pos = pos
+
 
 class Switch(Block):
     def __init__(self, color, x, y=None):
@@ -282,13 +181,9 @@ class Switch(Block):
         self.sprite = scene.layers[sprite_layer].add_sprite(self.on_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
         # set initial wobble
 
-        self.shape = create_static(position, sensor=True)
-        self.shape.game_object = self
-
     def on_touched(self):
         new_state = level.toggle_color(self.color)
         self.sprite.image = self.on_image if new_state else self.off_image
-
 
 
 def background_block(image, x, y=None):
@@ -328,9 +223,6 @@ game_clock = main_clock.create_sub_clock()
 
 
 class Level:
-
-    physical_objects: dict[pymunk.Body: Positionable]
-
     def __init__(self):
         self.color_state = {color: True for color in colors}
         self.color_to_shapes = {color: [] for color in colors}
@@ -341,13 +233,7 @@ class Level:
         self.physical_objects = {}
         self.animated_objects = []
 
-
-    async def run_physics(self):
-        """Step the Pymunk physics simulation."""
-        async for dt in game_clock.coro.frames_dt():
-            space.step(dt)
-            for body, positionable in self.physical_objects.items():
-                positionable.pos = body.position * TILE_SIZE
+        self.collision_grid = collision.GridCollider((1000, 1000))
 
     async def animate(self):
         async for dt in game_clock.coro.frames_dt():
@@ -358,12 +244,9 @@ class Level:
     async def run(self):
         global player
         level.load_map("test")
-        player = Player(controller=Controller())
         async with w2d.Nursery() as ns:
-            ns.do(self.run_physics())
             ns.do(self.animate())
-            ns.do(player.run(start_pos=self.current_checkpoint.pos))
-
+            ns.do(run_lives())
 
     def toggle_color(self, color):
         old_state = self.color_state[color]
@@ -373,9 +256,11 @@ class Level:
         scene.layers[color_to_layer[color] + 1].visible = old_state
 
         if not new_state:
-            space.remove(*self.color_to_shapes[color])
+            print(f"FIXME: remove {color} blocks")
+            #space.remove(*self.color_to_shapes[color])
         else:
-            space.add(*self.color_to_shapes[color])
+            print(f"FIXME: add {color} blocks")
+            #space.add(*self.color_to_shapes[color])
 
         return new_state
 
@@ -477,13 +362,17 @@ class Controller:
 
 
 class Player:
-    on_ground: w2d.Event
+    size = vec2(1, 1)
 
-    def __init__(self, controller: Controller):
-        self.shape = None
-        self.speed = vec2(0, 0)
-        self.x_acceleration = 0
-        self.desired_x_speed = 0
+    def __init__(self, pos: vec2, controller: Controller):
+        self.v = vec2(0, 0)
+        self.shape = scene.layers[player_layer].add_star(
+            pos=pos * TILE_SIZE,
+            points=6,
+            outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5)
+        )
+
+        scene.camera.pos = self.shape.pos
 
         self.controller = controller
         self._jumps_remaining = 2
@@ -526,46 +415,73 @@ class Player:
             if ev.type == pygame.KEYDOWN:
                 level.toggle_color(color)
 
-    async def run(self, start_pos: vec2):
-        screen_pos = start_pos * TILE_SIZE
-        # we'll fix this before drawing in monitor_player_position
-        scene.camera.pos = screen_pos
-        self.shape = scene.layers[player_layer].add_star(
-            pos=screen_pos,
-            points=6,
-            outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5))
-        with physical(self.shape) as self.body:
-            self.body.player = self
-            for shape in self.body.shapes:
-                shape.collision_type = COLLISION_TYPE_PLAYER
+    async def run(self):
+        with self.shape:
             async with w2d.Nursery() as ns:
                 self.nursery = ns
                 ns.do(self.accel())
                 ns.do(self.jump())
+                ns.do(self.run_physics())
                 ns.do(self.monitor_player_position())
                 ns.do(self.handle_keys())
+
+    ACCEL_FORCE = 200
 
     async def accel(self):
         """Accelerate the player, including in the air."""
         async for _ in game_clock.coro.frames():
-            self.body.apply_force_at_world_point(
-                (self.controller.x_axis() * self.ACCEL_FORCE, 0),
-                self.body.position
-            )
-
-    ACCEL_FORCE = 400.0
-    JUMP_IMPULSE = (0, -100)
+            self.v += vec2(self.controller.x_axis() * self.ACCEL_FORCE, 0)
 
     async def jump(self):
         while True:
             await self.controller.jump()
             if self._jumps_remaining:
-                self.body.apply_impulse_at_local_point(self.JUMP_IMPULSE)
+                self.v += vec2(0, -100)
                 self._jumps_remaining -= 1
+
+    # Cells per second
+    JUMP = vec2(0, -70)
+
+    # Cells per second per second
+    GRAVITY = vec2(0, 400)
+
+    # The plane that kills you
+    DEATH_PLANE = 600.0
+
+    TERMINAL_VELOCITY = 100.0
+
+    async def run_physics(self):
+        dt = 1/60
+        async for _ in game_clock.coro.frames():
+            pos = self.shape.pos
+            u = self.v
+
+            v = u + self.GRAVITY * dt
+            if v.y > self.TERMINAL_VELOCITY:
+                v = vec2(v.x, self.TERMINAL_VELOCITY)
+            self.v = v
+
+            delta = 0.5 * (u + self.v) * dt
+
+            if collision := level.collision_grid.collide_moving_pawn(
+                self,
+                delta,
+                pos=pos
+            ):
+                t, pos, hit = collision
+                print(f"collided with {hit} at {pos}")
+            else:
+                pos = pos + delta
+
+            self.shape.pos = pos
+
+            # death plane
+            if pos.y >= self.DEATH_PLANE:
+                self.nursery.cancel()
 
     async def monitor_player_position(self):
         death_plane = level.map_size.y
-        last_pos = self.body.position
+        last_pos = self.shape.pos
         async for _ in game_clock.coro.frames():
             # Although it's not explicitly guaranteed by wasabi2d
             # and its -> *async* <- coroutines, in fact this will
@@ -573,13 +489,10 @@ class Player:
             # physics step for a given logical frame.
 
             # check if the player has fallen below the death plane
-            pos = self.body.position
+            pos = self.shape.pos
             if pos.y >= death_plane:
                 # respawn!
-                pos = last_pos = level.current_checkpoint.pos
-                scene.camera.pos = self.shape.pos = pos * TILE_SIZE
-                self.body.position = tuple(pos)
-                self.body.velocity = (0.0, 0.0)
+                self.nursery.cancel()
 
             # adjust camera based on self.body.position
             # (the player no longer stores its own position,
@@ -679,6 +592,13 @@ class Player:
             last_pos = pos
 
 
+
+async def run_lives():
+    controller = Controller()
+    for _ in range(3):
+        pos = level.current_checkpoint.pos
+        player = Player(pos, controller)
+        await player.run()
 
 
 async def drive_main_clock():

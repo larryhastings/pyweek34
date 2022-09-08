@@ -139,7 +139,7 @@ class GridCollider(Generic[T]):
         pos_cell_coord = vec2(x_integer, y_integer)
         x_aligned = 0 if x_fraction else 1
         y_aligned = 0 if y_fraction else 1
-        hits = []
+        hits: list[tuple[T, ...]] = []
         append = hits.append
 
         if (pawn.size.x <= 1) and (pawn.size.y <= 1) and x_aligned and y_aligned:
