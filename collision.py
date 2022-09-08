@@ -30,24 +30,47 @@
 ##    it does *not* collide with tiles in cells at
 ##      (0, 1), (1, 0), or (1, 1).
 ##
-
-import collections
+from collections import defaultdict
 from math import ceil, floor, inf, modf, nextafter
-import wasabigeom
 from wasabigeom import vec2
+from typing import Protocol, TypeVar, Generic, Union, Optional, Sequence, overload
 
 
 vec2_0_1 = vec2(0, 1)
 vec2_1_0 = vec2(1, 1)
 vec2_1_1 = vec2(1, 1)
 
-class GridCollider:
-    def __init__(self, size):
+Number = Union[float, int]
+Vec2Like = Union[vec2, tuple[Number, Number]]
+
+
+class AbstractTile(Protocol):
+    pos: Vec2Like
+
+
+class AbstractPawn(Protocol):
+    """Things that can move within the collider."""
+
+    size: vec2
+
+
+class AbstractPositionedPawn(Protocol):
+    """A thing that can move within the collider, with its own position."""
+
+    size: vec2
+    pos: Vec2Like
+
+
+T = TypeVar('T', bound=AbstractTile)
+
+
+class GridCollider(Generic[T]):
+    def __init__(self, size: Vec2Like):
         size = vec2(size)
         self.size = size
-        self.grid = collections.defaultdict(tuple)
+        self.grid: defaultdict[vec2, tuple[T, ...]] = defaultdict(tuple)
 
-    def add(self, tile):
+    def add(self, tile: T) -> None:
         pos = vec2(tile.pos)
         if (pos.x > self.size.x) or (pos.y > self.size.y):
             raise ValueError(f"tile {tile} is outside the grid, grid is size ({self.size.x}, {self.size.y})")
@@ -56,7 +79,7 @@ class GridCollider:
             raise ValueError(f"tile {tile} already in grid at {pos}")
         self.grid[pos] = value + (tile,)
 
-    def remove(self, tile):
+    def remove(self, tile: T) -> None:
         """
         Removes tile from the grid.
 
@@ -73,11 +96,23 @@ class GridCollider:
         assert tile not in new_value
         self.grid[pos] = new_value
 
-    def __contains__(self, tile):
+    def __contains__(self, tile: T) -> bool:
         pos = vec2(tile.pos)
         return tile in self.grid[pos]
 
-    def collide_pawn(self, pawn, pos=None):
+    @overload
+    def collide_pawn(self, pawn: AbstractPositionedPawn) -> Optional[Sequence[T]]:
+        ...
+
+    @overload
+    def collide_pawn(self, pawn: AbstractPawn, pos: Vec2Like) -> Optional[Sequence[T]]:
+        ...
+
+    def collide_pawn(
+        self,
+        pawn,
+        pos: Optional[Vec2Like] = None
+    ) -> Optional[Sequence[T]]:
         """
         Queries the grid to see if the pawn collides with any tiles.
 
@@ -144,8 +179,31 @@ class GridCollider:
         # (don't bother to turn it into a tuple.)
         return [tile  for hit in hits  for tile in hit]
 
+    @overload
+    def collide_moving_pawn(
+        self,
+        pawn: AbstractPositionedPawn,
+        delta: vec2,
+    ) -> Optional[tuple[float, vec2, Sequence[T]]]:
+        ...
 
-    def collide_moving_pawn(self, pawn, delta, *, pos=None):
+    @overload
+    def collide_moving_pawn(
+        self,
+        pawn: AbstractPawn,
+        delta: vec2,
+        *,
+        pos: Vec2Like
+    ) -> Optional[tuple[float, vec2, Sequence[T]]]:
+        ...
+
+    def collide_moving_pawn(
+        self,
+        pawn,
+        delta: vec2,
+        *,
+        pos: Optional[Vec2Like] = None
+    ) -> Optional[tuple[float, vec2, Sequence[T]]]:
         """
         Queries the grid to see if a moving pawn collides with any tiles.
 
@@ -353,8 +411,7 @@ if __name__ == "__main__":
         sys.exit(f"Failure in test_collide_pawn test {local_tests_run}:\n        pawn: {pawn}\n    expected: {expected}\n         got: {got}")
 
 
-    grid = GridCollider(vec2(200, 100))
-
+    grid: GridCollider[Tile] = GridCollider(vec2(200, 100))
 
     tile_15_20 = Tile(vec2(15, 20))
     grid.add(tile_15_20)
