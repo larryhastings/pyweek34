@@ -20,7 +20,7 @@ import pygame
 
 
 TILE_SIZE: int = 18
-FRICTION: float = 0
+FRICTION: float = 0.1
 GRAVITY: float = 20
 
 game = None
@@ -61,10 +61,6 @@ def on_player_collided(
     space: pymunk.Space,
     data: Any,
 ) -> bool:
-
-    if not arbiter.is_first_contact:
-        return True
-
     a, b = arbiter.shapes
 
     game_object = getattr(b, "game_object", None)
@@ -74,8 +70,7 @@ def on_player_collided(
     is_down = 89 < arbiter.normal.angle_degrees < 91
     if is_down:
         player = a.body.player
-        player._add_floor()
-    data['on_ground'] = is_down
+        player._jumps_remaining = 2
 
     # Handle this collision normally
     return True
@@ -86,8 +81,6 @@ def on_player_separate(
     space: pymunk.Space,
     data: Any,
 ) -> bool:
-    if data.get('on_ground'):
-        player._remove_floor()
     return True
 
 
@@ -109,7 +102,7 @@ def create_body(
     poly = pymunk.Poly.create_box(
         body,
         size=size,
-        radius=0.1,
+        radius=0.2,
     )
     poly.friction = FRICTION
     poly.elasticity = 0
@@ -167,7 +160,6 @@ def physical(
     finally:
         space.remove(body, *body.shapes)
         del level.physical_objects[body]
-
 
 
 color_tile_maps = {}
@@ -494,8 +486,7 @@ class Player:
         self.desired_x_speed = 0
 
         self.controller = controller
-        self._standing_on_count = 0
-        self.on_ground = w2d.Event()
+        self._jumps_remaining = 2
 
         # cwbb_factor defines how big the cwbb is around the player.
         # the larger the number, the larger the cwbb.
@@ -517,15 +508,6 @@ class Player:
             -scene_height * cwbb_factor, # b
             +scene_height * cwbb_factor, # t
             )
-
-    def _add_floor(self):
-        self._standing_on_count += 1
-        self.on_ground.set()
-
-    def _remove_floor(self):
-        self._standing_on_count -= 1
-        if self._standing_on_count == 0:
-            self.on_ground = w2d.Event()
 
     async def handle_keys(self):
         key_to_action = {
@@ -571,22 +553,15 @@ class Player:
                 self.body.position
             )
 
-    ACCEL_FORCE = 200.0
+    ACCEL_FORCE = 400.0
     JUMP_IMPULSE = (0, -100)
 
     async def jump(self):
-        async def _jump_on_press():
-            """Apply an impulse to the player body when jump is pressed."""
-            await self.controller.jump()
-            self.body.apply_impulse_at_local_point(self.JUMP_IMPULSE)
-
         while True:
-            await _jump_on_press()
-            async with w2d.Nursery() as ns:
-                if self.on_ground.is_set():
-                    ns.do(_jump_on_press())
-                await self.on_ground
-                ns.cancel()
+            await self.controller.jump()
+            if self._jumps_remaining:
+                self.body.apply_impulse_at_local_point(self.JUMP_IMPULSE)
+                self._jumps_remaining -= 1
 
     async def monitor_player_position(self):
         death_plane = level.map_size.y
