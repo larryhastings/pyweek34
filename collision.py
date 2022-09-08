@@ -36,9 +36,10 @@ from wasabigeom import vec2
 from typing import Protocol, TypeVar, Generic, Union, Optional, Sequence, overload
 
 
-vec2_0_1 = vec2(0, 1)
-vec2_1_0 = vec2(1, 1)
-vec2_1_1 = vec2(1, 1)
+vec2_zero = vec2(0, 0)
+vec2_0_1  = vec2(0, 1)
+vec2_1_0  = vec2(1, 0)
+vec2_1_1  = vec2(1, 1)
 
 Number = Union[float, int]
 Vec2Like = Union[vec2, tuple[Number, Number]]
@@ -69,14 +70,15 @@ class GridCollider(Generic[T]):
         size = vec2(size)
         self.size = size
         self.grid: defaultdict[vec2, tuple[T, ...]] = defaultdict(tuple)
+        self.tiles_seen = set()
 
     def add(self, tile: T) -> None:
+        if tile in self.tiles_seen:
+            raise ValueError(f"tile {tile} already in grid")
         pos = vec2(tile.pos)
         if (pos.x > self.size.x) or (pos.y > self.size.y):
             raise ValueError(f"tile {tile} is outside the grid, grid is size ({self.size.x}, {self.size.y})")
         value = self.grid[pos]
-        if tile in value:
-            raise ValueError(f"tile {tile} already in grid at {pos}")
         self.grid[pos] = value + (tile,)
 
     def remove(self, tile: T) -> None:
@@ -86,19 +88,22 @@ class GridCollider(Generic[T]):
         If the tile is not on the grid
         (at that position), does nothing.
         """
+        if tile not in self.tiles_seen:
+            raise ValueError(f"tile {tile} not in grid")
         pos = vec2(tile.pos)
         value = self.grid[pos]
-        try:
-            index = value.index(tile)
-        except ValueError:
-            raise ValueError(f"tile {tile} not in grid at {pos}")
+        index = value.index(tile)
         new_value = value[0:index] + value[index + 1:-1]
         assert tile not in new_value
         self.grid[pos] = new_value
 
     def __contains__(self, tile: T) -> bool:
+        result = tile in self.tiles_seen
+        # a little double-checking, only slows it down a little
         pos = vec2(tile.pos)
-        return tile in self.grid[pos]
+        result2 = tile in self.grid[pos]
+        assert result == result2
+        return result
 
     @overload
     def collide_pawn(self, pawn: AbstractPositionedPawn) -> Optional[Sequence[T]]:
@@ -150,7 +155,6 @@ class GridCollider(Generic[T]):
             tiles = self.grid[pos_cell_coord]
             if tiles:
                 append(tiles)
-            pos_cell_coord_offset = pos_cell_coord + vec2_1_1
             if not x_aligned:
                 tiles = self.grid[pos_cell_coord + vec2_1_0]
                 if tiles:
@@ -234,7 +238,8 @@ class GridCollider(Generic[T]):
         hits = self.collide_pawn(pawn, pos)
         if hits:
             # print(f"    found at time t=0: {hits}")
-            return (0, pos, hits)
+            yield (0, pos, hits)
+            return
 
         # Okay, we have to do the hard thing.  Here's how it works.
         #
@@ -324,42 +329,82 @@ class GridCollider(Generic[T]):
                 hits = self.collide_pawn(pawn, pos=new_pos)
                 # print(f"      {delta=} {new_pos=} {pos + size + (delta * t)=} {hits=}")
                 if hits:
-                    candidates.append((t, new_pos, hits))
-                    # print(f"      found! {candidates[-1]}")
-                    break
+                    # print("found! {(t, new_pos, hits)=}")
+                    yield (t, new_pos, hits)
 
                 coord += sign
 
+        iterators = []
         if delta.x > 0:
             # moving right, check right edge
-            candidate = check_moving_pawn_along_one_coordinate(top_right.x, delta.x)
+            x_iterator = check_moving_pawn_along_one_coordinate(top_right.x, delta.x)
         elif delta.x < 0:
             # moving left, check left edge
-            candidate = check_moving_pawn_along_one_coordinate(pos.x, delta.x)
+            x_iterator = check_moving_pawn_along_one_coordinate(pos.x, delta.x)
         else:
-            candidate = None
-
-        if candidate:
-            candidates.append(candidate)
+            x_iterator = None
 
         if delta.y > 0:
             # moving up, check top edge
-            candidate = check_moving_pawn_along_one_coordinate(top_right.y, delta.y)
+            y_iterator = check_moving_pawn_along_one_coordinate(top_right.y, delta.y)
         elif delta.y < 0:
             # moving down, check bottom edge
-            candidate = check_moving_pawn_along_one_coordinate(pos.y, delta.y)
+            y_iterator = check_moving_pawn_along_one_coordinate(pos.y, delta.y)
         else:
-            candidate = None
+            y_iterator = None
 
-        if candidate:
-            candidates.append(candidate)
+        if not (x_iterator or y_iterator):
+            return
 
-        if not candidates:
-            return None
-        candidates.sort()
-        return candidates[0]
+        x = None
+        y = None
+        previous = None
+        while True:
+            if x is None:
+                try:
+                    x = next(x_iterator)
+                except StopIteration:
+                    pass
 
+            if y is None:
+                try:
+                    y = next(y_iterator)
+                except StopIteration:
+                    if x is None:
+                        return
 
+            # print(f"loop:\n  {x=}\n\n  {y=}\n\n  {x and y=}\n")
+            if bool(x) and bool(y):
+                if x[0] == y[0]:
+                    # combine
+                    assert x[1] == y[1]
+                    all_hits = tuple(set(x[2]) | set(y[2]))
+                    value = (x[0], x[1], all_hits)
+                    x = None
+                    y = None
+                elif x[0] < y[0]:
+                    value = x
+                    x = None
+                else:
+                    value = y
+                    y = None
+            elif x:
+                value = x
+                x = None
+            else:
+                assert y
+                value = y
+                y = None
+
+            # cull redundant results
+            should_yield = not previous
+            if not should_yield:
+                previous_hits = set(previous[2])
+                value_hits = set(value[2])
+                should_yield = value_hits != previous_hits
+            if should_yield:
+                yield value
+                previous = value
 
 
 if __name__ == "__main__":
@@ -392,6 +437,39 @@ if __name__ == "__main__":
     local_tests_run = 0
     global_tests_run = 0
 
+    failure_text = []
+
+    class raw_string:
+        def __init__(self, s):
+            self.s = s
+        def __repr__(self):
+            return self.s
+        def __str__(self):
+            return self.s
+
+    def make_hits_pretty(hits):
+        if not hits:
+            return str(hits)
+        hits = list(hits)
+        hits.sort(key=lambda tile: tile.id)
+        hits = [raw_string(f"{tile_names[tile]}") for tile in hits]
+        return hits
+
+    def make_result_tuple_pretty(t):
+        if not t:
+            return "None"
+        hits = make_hits_pretty(t[2])
+        return (t[0], t[1], hits)
+
+    def failure_print(*a):
+        failure_text.append("".join(str(o) for o in a))
+
+    def failure_exit():
+        sys.exit("\n".join(failure_text))
+
+    def failure_clear():
+        failure_text.clear()
+
     def test_collide_pawn(pawn, expected, *, pos=None):
         global local_tests_run
         local_tests_run += 1
@@ -408,28 +486,41 @@ if __name__ == "__main__":
         if got_set == expected_set:
             return
 
-        sys.exit(f"Failure in test_collide_pawn test {local_tests_run}:\n        pawn: {pawn}\n    expected: {expected}\n         got: {got}")
+        failure_print()
+        failure_print(f"Failure in test_collide_pawn test {local_tests_run}:")
+        failure_print(f"        pawn: {pawn}")
+        failure_print(f"    expected: {expected}")
+        failure_print(f"         got: {make_hits_pretty(got)}")
+        failure_exit()
 
 
     grid: GridCollider[Tile] = GridCollider(vec2(200, 100))
 
+    tile_names = {}
+
     tile_15_20 = Tile(vec2(15, 20))
     grid.add(tile_15_20)
+    tile_names[tile_15_20] = "tile_15_20"
 
     tile_16_20 = Tile(vec2(16, 20))
     grid.add(tile_16_20)
+    tile_names[tile_16_20] = "tile_16_20"
 
     tile_17_20 = Tile(vec2(17, 20))
     grid.add(tile_17_20)
+    tile_names[tile_17_20] = "tile_17_20"
 
     tile_15_21 = Tile(vec2(15, 21))
     grid.add(tile_15_21)
+    tile_names[tile_15_21] = "tile_15_21"
 
     tile_16_21 = Tile(vec2(16, 21))
     grid.add(tile_16_21)
+    tile_names[tile_16_21] = "tile_16_21"
 
     tile_17_21 = Tile(vec2(17, 21))
     grid.add(tile_17_21)
+    tile_names[tile_17_21] = "tile_17_21"
 
 
     vec2_1_1 = vec2(1, 1)
@@ -447,7 +538,7 @@ if __name__ == "__main__":
         pawn.pos = tile_15_20.pos
         test_collide_pawn(pawn, (tile_15_20,tile_16_20))
     except SystemExit:
-        pass
+        failure_clear()
 
     pawn.pos = vec2(tile_15_20.pos.x - 0.2, tile_15_20.pos.y - 0.2)
     test_collide_pawn(pawn, (tile_15_20,))
@@ -475,16 +566,25 @@ if __name__ == "__main__":
     pawn.size= vec2_3_3
     test_collide_pawn(pawn, (tile_15_21, tile_16_21, tile_17_21))
 
+    pawn.pos = vec2(15.1, 20.1)
+    delta = vec2(3, 3)
+    pawn.size = vec2_1_1
+    test_collide_pawn(pawn, ({tile_15_20, tile_15_21, tile_16_20, tile_16_21}))
+
 
     local_tests_run = 0
 
-    def test_collide_moving_pawn(pawn, delta, expected, *, pos=None):
+    def test_collide_moving_pawn_first_result(pawn, delta, expected, *, pos=None):
         global local_tests_run
         local_tests_run += 1
         global global_tests_run
         global_tests_run += 1
 
-        got = grid.collide_moving_pawn(pawn, delta, pos=pos)
+        values = [x for x in grid.collide_moving_pawn(pawn, delta, pos=pos)]
+        if not values:
+            got = None
+        else:
+            got = values[0]
 
         if (expected is None) and (got == None):
             return
@@ -498,27 +598,68 @@ if __name__ == "__main__":
         if (got_t == expected_t) and (got_pos == expected_pos) and (set(got_hits) == set(expected_hits)):
             return
 
-        sys.exit(f"Failure in test_collide_moving_pawn test {local_tests_run}:\n        pawn: {pawn}\n       delta: {delta}\n    expected: {expected}\n         got: {got}")
+        failure_print(f"Failure in test_collide_moving_pawn_first_result test {local_tests_run}:")
+        failure_print(f"        pawn: {pawn}")
+        failure_print(f"       delta: {delta}")
+        failure_print(f"    expected: {expected}")
+        failure_print(f"         got: {make_hits_pretty(got)}")
+        failure_exit()
 
     pawn.pos = vec2(14, 19)
     delta = vec2(2, 2)
     pawn.size = vec2_1_1
-    test_collide_moving_pawn(pawn, delta,
-        (8.881784197001252e-16, vec2(14.000000000000002, 19.0), [tile_15_20])
+    test_collide_moving_pawn_first_result(pawn, delta,
+        (1.7763568394002505e-15, vec2(14.000000000000004, 19.000000000000004), [tile_15_20])
         )
 
     pawn.pos = vec2(13, 20)
     delta = vec2(3, 0.5)
-    test_collide_moving_pawn(pawn, delta,
-        (0.3333333333333339, vec2(14.000000000000002, 20.166666666666668), [tile_15_21, tile_15_21])
+    test_collide_moving_pawn_first_result(pawn, delta,
+        (0.3333333333333339, vec2(14.000000000000002, 20.166666666666668), [tile_15_20, tile_15_21])
         )
 
     pawn.pos = vec2(15, 23)
     pawn.size = vec2_3_3
     delta = vec2(1, -2)
-    test_collide_moving_pawn(pawn, delta,
+    test_collide_moving_pawn_first_result(pawn, delta,
         (0.5000000000000018, vec2(15.500000000000002, 21.999999999999996), [tile_15_21, tile_16_21, tile_17_21])
         )
+
+    local_tests_run = 0
+    def test_collide_moving_pawn_all_results(pawn, delta, expected, *, pos=None):
+        global local_tests_run
+        local_tests_run += 1
+        global global_tests_run
+        global_tests_run += 1
+
+        got = [(x[0], x[1], set(x[2])) for x in grid.collide_moving_pawn(pawn, delta, pos=pos)]
+        expected = [(x[0], x[1], set(x[2])) for x in expected]
+
+        if got == expected:
+            return
+
+        failure_print(f"Failure in test_collide_moving_pawn_all_results test {local_tests_run}:")
+        failure_print(f"        pawn: {pawn}")
+        failure_print(f"       delta: {delta}")
+        failure_print(f"    expected: {expected}")
+        failure_print(f"         got:")
+        failure_print(f"              [")
+        for o in got:
+            failure_print(f"              ", make_result_tuple_pretty(o))
+        failure_print(f"              ]")
+        failure_exit()
+
+    pawn.pos = vec2(14, 19)
+    delta = vec2(3, 3)
+    pawn.size = vec2_1_1
+    test_collide_moving_pawn_all_results(pawn, delta,
+        [
+        (1.1842378929335002e-15, vec2(14.000000000000004, 19.000000000000004), [tile_15_20]),
+        (0.33333333333333454, vec2(15.000000000000004, 20.000000000000004), [tile_15_20, tile_16_20, tile_15_21, tile_16_21]),
+        (0.6666666666666679, vec2(16.000000000000004, 21.000000000000004), [tile_16_21, tile_17_21]),
+        ]
+        )
+
 
 
     print(f"All {global_tests_run} tests passed.")
