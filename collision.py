@@ -338,7 +338,6 @@ class GridCollider(Generic[T]):
         if hits:
             # print(f"    found at time t=0: {hits}")
             yield (0, pos, hits)
-            return
 
         # Okay, we have to do the hard thing.  Here's how it works.
         #
@@ -389,6 +388,9 @@ class GridCollider(Generic[T]):
 
 
         def check_moving_pawn_along_one_coordinate(start, scalar_delta):
+            if scalar_delta == 0:
+                return
+
             assert scalar_delta
             if scalar_delta > 0:
                 sign = 1
@@ -435,26 +437,19 @@ class GridCollider(Generic[T]):
                 coord += sign
 
         iterators = []
-        if delta.x > 0:
+        if delta.x >= 0:
             # moving right, check right edge
             x_iterator = check_moving_pawn_along_one_coordinate(top_right.x, delta.x)
-        elif delta.x < 0:
+        else:
             # moving left, check left edge
             x_iterator = check_moving_pawn_along_one_coordinate(pos.x, delta.x)
-        else:
-            x_iterator = None
 
-        if delta.y > 0:
+        if delta.y >= 0:
             # moving up, check top edge
             y_iterator = check_moving_pawn_along_one_coordinate(top_right.y, delta.y)
-        elif delta.y < 0:
+        else:
             # moving down, check bottom edge
             y_iterator = check_moving_pawn_along_one_coordinate(pos.y, delta.y)
-        else:
-            y_iterator = None
-
-        if not (x_iterator or y_iterator):
-            return
 
         x = None
         y = None
@@ -849,6 +844,42 @@ if __name__ == "__main__":
         failure_print(f"         got:")
         failure_print_list_of_tuples(got)
         failure_exit()
+
+    pawn.pos = vec2(14, 20.5)
+    delta = vec2(4, 0)
+    pawn.size = vec2_1_1
+    test_collide_moving_pawn_all_results(pawn, delta,
+              [
+              (4.440892098500626e-16, vec2(14.000000000000002, 20.5), [tile_15_20, tile_15_21]),
+              (0.2500000000000009, vec2(15.000000000000004, 20.5), [tile_15_20, tile_16_20, tile_15_21, tile_16_21]),
+              (0.5000000000000009, vec2(16.000000000000004, 20.5), [tile_16_20, tile_17_20, tile_16_21, tile_17_21]),
+              (0.7500000000000009, vec2(17.000000000000004, 20.5), [tile_17_20, tile_17_21]),
+              ]
+        )
+
+
+    pawn.pos = vec2(15.5, 18)
+    delta = vec2(0, 4)
+    pawn.size = vec2_2_2
+    test_collide_moving_pawn_all_results(pawn, delta,
+              [
+              (8.881784197001252e-16, vec2(15.5, 18.000000000000004), [tile_15_20, tile_16_20, tile_17_20]),
+              (0.2500000000000009, vec2(15.5, 19.000000000000004), [tile_15_20, tile_16_20, tile_17_20, tile_15_21, tile_16_21, tile_17_21]),
+              (0.7500000000000009, vec2(15.5, 21.000000000000004), [tile_15_21, tile_16_21, tile_17_21]),
+              ]
+        )
+
+    pawn.pos = vec2(15.5, 19)
+    delta = vec2(0, 4)
+    pawn.size = vec2_2_2
+    test_collide_moving_pawn_all_results(pawn, delta,
+              [
+              (0, vec2(15.5, 19.0), [tile_15_20, tile_16_20, tile_17_20]),
+              (8.881784197001252e-16, vec2(15.5, 19.000000000000004), [tile_15_20, tile_16_20, tile_17_20, tile_15_21, tile_16_21, tile_17_21]),
+              (0.5000000000000009, vec2(15.5, 21.000000000000004), [tile_15_21, tile_16_21, tile_17_21]),
+              ]
+        )
+
 
     pawn.pos = vec2(14, 19)
     delta = vec2(3, 3)
