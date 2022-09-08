@@ -375,7 +375,7 @@ class Player:
         scene.camera.pos = self.shape.pos
 
         self.controller = controller
-        self._jumps_remaining = 2
+        self._jumps_remaining = 2e50 # 2
 
         # cwbb_factor defines how big the cwbb is around the player.
         # the larger the number, the larger the cwbb.
@@ -425,30 +425,45 @@ class Player:
                 ns.do(self.monitor_player_position())
                 ns.do(self.handle_keys())
 
-    ACCEL_FORCE = 200
-
     async def accel(self):
         """Accelerate the player, including in the air."""
         async for _ in game_clock.coro.frames():
-            self.v += vec2(self.controller.x_axis() * self.ACCEL_FORCE, 0)
+            x_axis = self.controller.x_axis()
+            if x_axis:
+                acceleration = self.controller.x_axis() * self.ACCEL_FORCE
+                speed_x = self.v.x + acceleration
+                speed_x = min(max(speed_x, -self.MAX_HORIZONTAL_SPEED), self.MAX_HORIZONTAL_SPEED)
+            else:
+                speed_x = self.v.x / 2
+                if speed_x < 0.05:
+                    speed_x = 0
+            self.v = vec2(speed_x, self.v.y)
+
 
     async def jump(self):
         while True:
             await self.controller.jump()
             if self._jumps_remaining:
-                self.v += vec2(0, -100)
+                self.v += self.JUMP
                 self._jumps_remaining -= 1
 
     # Cells per second
-    JUMP = vec2(0, -70)
+    JUMP = vec2(0, -1.3)
 
     # Cells per second per second
-    GRAVITY = vec2(0, 400)
+    RISING_GRAVITY = vec2(0, 6)
+
+    # Cells per second per second
+    FALLING_GRAVITY = vec2(0, 8)
 
     # The plane that kills you
     DEATH_PLANE = 600.0
 
     TERMINAL_VELOCITY = 100.0
+
+    ACCEL_FORCE = 0.1
+
+    MAX_HORIZONTAL_SPEED = 0.5
 
     @property
     def pos(self) -> vec2:
@@ -461,18 +476,20 @@ class Player:
         self.shape.pos = v * TILE_SIZE
 
     async def run_physics(self):
-        dt = 1/60
         tick = 0
+        dt = 1/60
+        rising_gravity = self.RISING_GRAVITY * dt
+        falling_gravity = self.FALLING_GRAVITY * dt
         async for _ in game_clock.coro.frames():
-            u = self.v
+            delta = self.v
+            # print(f"[{tick:06}] {delta=}")
 
-            v = u + self.GRAVITY * dt
-            if v.y > self.TERMINAL_VELOCITY:
-                v = vec2(v.x, self.TERMINAL_VELOCITY)
-            self.v = v
+            gravity = rising_gravity if delta.y < 0 else falling_gravity
+            delta += gravity
+            if delta.y > self.TERMINAL_VELOCITY:
+                delta = vec2(delta.x, self.TERMINAL_VELOCITY)
 
-            delta = 0.5 * (u + self.v) * dt
-            # print(f"[{tick:06}] {self.pos=} {self.v=} {delta=}:")
+            # print(f"[{tick:06}] {self.pos=} {delta=}:")
 
             for t, pos, hit in level.collision_grid.collide_moving_pawn(
                 self,
@@ -482,10 +499,12 @@ class Player:
                 for tile in hit:
                     t_just_barely_before_the_collision = math.nextafter(t, -math.inf)
                     self.pos = self.pos + (delta * t_just_barely_before_the_collision)
-                    self.v = vec2(self.v.x, 0)
+                    delta = vec2(delta.x, 0)
                 break
-            else:
-                self.pos += delta
+            self.pos += delta
+
+            # print(f"[{tick:06}] final {delta=}")
+            self.v = delta
 
             tick = tick + 1
 
