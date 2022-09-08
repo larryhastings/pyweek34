@@ -47,7 +47,7 @@
 from collections import defaultdict
 from math import ceil, floor, inf, modf, nextafter
 from wasabigeom import vec2
-from typing import Protocol, TypeVar, Generic, Union, Optional, Sequence, overload
+from typing import Iterable, Protocol, TypeVar, Generic, Union, Optional, Sequence, overload
 
 
 vec2_0_0 = vec2_zero = vec2(0, 0)
@@ -287,7 +287,7 @@ class GridCollider(Generic[T]):
         self,
         pawn: AbstractPositionedPawn,
         delta: vec2,
-    ) -> Optional[tuple[float, vec2, Sequence[T]]]:
+    ) -> Iterable[tuple[float, vec2, Sequence[T]]]:
         ...
 
     @overload
@@ -297,7 +297,7 @@ class GridCollider(Generic[T]):
         delta: vec2,
         *,
         pos: Vec2Like
-    ) -> Optional[tuple[float, vec2, Sequence[T]]]:
+    ) -> Iterable[tuple[float, vec2, Sequence[T]]]:
         ...
 
     def collide_moving_pawn(
@@ -306,7 +306,7 @@ class GridCollider(Generic[T]):
         delta: vec2,
         *,
         pos: Optional[Vec2Like] = None
-    ) -> Optional[tuple[float, vec2, Sequence[T]]]:
+    ) -> Iterable[tuple[float, vec2, Sequence[T]]]:
         """
         Queries the grid to see if a moving pawn collides with any tiles.
 
