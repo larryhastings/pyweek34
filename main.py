@@ -369,27 +369,6 @@ class Player:
         self.controller = controller
         self._jumps_remaining = 2e50 # 2
 
-        # cwbb_factor defines how big the cwbb is around the player.
-        # the larger the number, the larger the cwbb.
-        #
-        # 1/6 means the camera can only move 1/6 of the screen
-        # away from the player before being constrained.
-        #
-        # 1 means it's the size of the entire viewport.
-        # 0 means it has zero size.
-        #
-        # you're encouraged to use a fraction.
-        cwbb_factor = 1/5
-
-        # cwbb_factor = (1 - cwbb_factor)
-        # cwbb is in screen coords
-        self.cwbb = wasabigeom.Rect(
-            -scene_width  * cwbb_factor, # l
-            +scene_width  * cwbb_factor, # r
-            -scene_height * cwbb_factor, # b
-            +scene_height * cwbb_factor, # t
-            )
-
     async def handle_keys(self):
         key_to_action = {
             w2d.keys.K_1: "red",
@@ -414,7 +393,7 @@ class Player:
                 ns.do(self.accel())
                 ns.do(self.jump())
                 ns.do(self.run_physics())
-                ns.do(self.monitor_player_position())
+                ns.do(self.camera_tracking())
                 ns.do(self.handle_keys())
 
     async def accel(self):
@@ -470,6 +449,7 @@ class Player:
     async def run_physics(self):
         tick = 0
         dt = 1/60
+        death_plane = level.map_size.y
         rising_gravity = self.RISING_GRAVITY * dt
         falling_gravity = self.FALLING_GRAVITY * dt
         async for _ in game_clock.coro.frames():
@@ -495,27 +475,48 @@ class Player:
                 break
             self.pos += delta
 
+            # check if the player has fallen below the death plane
+            if pos.y >= death_plane:
+                # death!
+                self.nursery.cancel()
+
             # print(f"[{tick:06}] final {delta=}")
             self.v = delta
 
             tick = tick + 1
 
-    async def monitor_player_position(self):
-        death_plane = level.map_size.y
-        last_pos = self.shape.pos
-        async for _ in game_clock.coro.frames():
+    async def camera_tracking(self):
+        last_pos = target_pos = self.shape.pos
+        target_offset = vec2(0, 0)
+
+        # cwbb_factor defines how big the cwbb is around the player.
+        # the larger the number, the larger the cwbb.
+        #
+        # 1/6 means the camera can only move 1/6 of the screen
+        # away from the player before being constrained.
+        #
+        # 1 means it's the size of the entire viewport.
+        # 0 means it has zero size.
+        #
+        # you're encouraged to use a fraction.
+        cwbb_factor = 1/5
+
+        # cwbb_factor = (1 - cwbb_factor)
+        # cwbb is in screen coords
+        CWBB = wasabigeom.Rect(
+            -scene_width  * cwbb_factor, # l
+            +scene_width  * cwbb_factor, # r
+            -scene_height * cwbb_factor, # b
+            +scene_height * cwbb_factor, # t
+        )
+
+        async for dt in game_clock.coro.frames_dt():
             # Although it's not explicitly guaranteed by wasabi2d
             # and its -> *async* <- coroutines, in fact this will
             # always be run *after* run_physics() computes its
             # physics step for a given logical frame.
 
-            # check if the player has fallen below the death plane
-            pos = self.shape.pos / TILE_SIZE
-            if pos.y >= death_plane:
-                # respawn!
-                self.nursery.cancel()
-
-            # adjust camera based on self.body.position
+            # adjust camera based on player position
             # (the player no longer stores its own position,
             #  it's only represented in PyMunk in tile space
             #  and onscreen in screen space)
@@ -559,37 +560,32 @@ class Player:
             # When initially setting up the level, the camera
             # is dropped on the player, and then the camera is
             # moved if the screen extends past the edge of the world.
+            screen_delta: vec2 = self.shape.pos - last_pos
+            if not screen_delta.is_zero():
+                last_pos = self.shape.pos
 
-            delta = pos - last_pos
+                target_offset = target_offset * 0.95 + 2 * screen_delta
+                target_pos = self.shape.pos + target_offset
 
-            screen_pos = pos * TILE_SIZE
-            screen_delta = delta * TILE_SIZE
+                cwbb = CWBB.translate(self.shape.pos)
 
-            cwbb = self.cwbb.translate(screen_pos)
-            camera = scene.camera.pos
+                # print(f"1. {screen_pos=}")
+                # print(f"   {cwbb=}")
+                # print(f"   {camera=}")
+                if not cwbb.contains(target_pos):
+                    x, y = target_pos
+                    if x < cwbb.l:
+                        x = cwbb.l
+                    elif x > cwbb.r:
+                        x = cwbb.r
+                    if y < cwbb.b:
+                        y = cwbb.b
+                    elif y > cwbb.t:
+                        y = cwbb.t
+                    target_pos = vec2(x, y)
+                    # print(f"   adjusted to {camera}")
 
-            # print(f"0. {camera=}")
-
-            # move camera
-            camera_delta = (screen_delta * 2)
-            camera = camera + camera_delta
-            # print(f"   translate camera by {camera_delta=}")
-
-            # print(f"1. {screen_pos=}")
-            # print(f"   {cwbb=}")
-            # print(f"   {camera=}")
-            if not cwbb.contains(camera):
-                x, y = camera
-                if x < cwbb.l:
-                    x = cwbb.l
-                elif x > cwbb.r:
-                    x = cwbb.r
-                if y < cwbb.b:
-                    y = cwbb.b
-                elif y > cwbb.t:
-                    y = cwbb.t
-                camera = vec2(x, y)
-                # print(f"   adjusted to {camera}")
+            camera = scene.camera.pos * 0.95 + target_pos * 0.05
 
             # print(f"2. {scene_camera_bounding_box=}")
             # print(f"   {camera=}")
@@ -609,9 +605,6 @@ class Player:
             # print(f"3. final screen {camera=}")
             # print()
             scene.camera.pos = camera
-
-            last_pos = pos
-
 
 
 async def run_lives():
