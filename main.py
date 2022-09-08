@@ -51,22 +51,6 @@ scene = w2d.Scene(scene_width, scene_height)
 scene.background = (0.9, 0.9, 0.9)
 
 
-def on_player_collided(
-    a: 'Player', b
-) -> bool:
-    game_object = getattr(b, "game_object", None)
-    if game_object:
-        game_object.on_touched()
-
-    is_down = 89 < arbiter.normal.angle_degrees < 91
-    if is_down:
-        player = a.body.player
-        player._jumps_remaining = 2
-
-    # Handle this collision normally
-    return True
-
-
 color_tile_maps = {}
 color_off_tile_maps = {}
 
