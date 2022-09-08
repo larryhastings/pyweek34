@@ -198,9 +198,14 @@ class GridCollider:
 
         candidates = []
 
-        def check_moving_pawn_along_one_coordinate(start, scalar_delta, sign):
-            assert ( ((scalar_delta < 0) and (sign == -1)) or ((scalar_delta > 0) and (sign == 1)) )
-
+        def check_moving_pawn_along_one_coordinate(start, scalar_delta):
+            assert scalar_delta
+            if scalar_delta > 0:
+                sign = 1
+                towards = inf
+            else:
+                sign = -1
+                towards = -inf
             # how far do we have to move initially to push this edge to border on its first new cell?
             fractional, integer = modf(start)
             edge_aligned = 0 if fractional else 1
@@ -209,9 +214,7 @@ class GridCollider:
             else:
                 coord = integer + sign
 
-            towards = inf * sign
-
-            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {scalar_delta=} {sign=}")
+            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {scalar_delta=}")
 
             while True:
                 # print(f"      --")
@@ -244,25 +247,27 @@ class GridCollider:
 
         if delta.x > 0:
             # moving right, check right edge
-            candidate = check_moving_pawn_along_one_coordinate(top_right.x, delta.x, 1)
-            if candidate:
-                candidates.append(candidate)
+            candidate = check_moving_pawn_along_one_coordinate(top_right.x, delta.x)
         elif delta.x < 0:
             # moving left, check left edge
-            candidate = check_moving_pawn_along_one_coordinate(pos.x, delta.x, -1)
-            if candidate:
-                candidates.append(candidate)
+            candidate = check_moving_pawn_along_one_coordinate(pos.x, delta.x)
+        else:
+            candidate = None
+
+        if candidate:
+            candidates.append(candidate)
 
         if delta.y > 0:
             # moving up, check top edge
-            candidate = check_moving_pawn_along_one_coordinate(top_right.y, delta.y, 1)
-            if candidate:
-                candidates.append(candidate)
+            candidate = check_moving_pawn_along_one_coordinate(top_right.y, delta.y)
         elif delta.y < 0:
             # moving down, check bottom edge
-            candidate = check_moving_pawn_along_one_coordinate(pos.y, delta.y, -1)
-            if candidate:
-                candidates.append(candidate)
+            candidate = check_moving_pawn_along_one_coordinate(pos.y, delta.y)
+        else:
+            candidate = None
+
+        if candidate:
+            candidates.append(candidate)
 
         if not candidates:
             return None
