@@ -1,3 +1,2 @@
 pytiled-parser==2.2.0
 wasabi-geom>=2
-pymunk==6.2.1

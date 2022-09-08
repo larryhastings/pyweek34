@@ -470,6 +470,9 @@ class Player:
             ):
                 t, pos, hit = collision
                 print(f"collided with {hit} at {pos}")
+                for tile in hit:
+                    sep = tile.pos - pos
+                    print(sep.angle())
             else:
                 pos = pos + delta
 
