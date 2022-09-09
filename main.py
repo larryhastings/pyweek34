@@ -1,7 +1,6 @@
 import bisect
 import builtins
 import math
-import os
 from pathlib import Path
 import collision
 from pytiled_parser import parse_map
