@@ -80,10 +80,9 @@ T = TypeVar('T', bound=AbstractTile)
 
 
 class GridCollider(Generic[T]):
-    def __init__(self, size: Vec2Like, *, origin: Vec2Like=vec2_zero):
-        self.size = vec2(size)
-        self.upper_left = vec2(origin)
-        self.lower_right = self.upper_left + self.size
+    def __init__(self, size: Vec2Like):
+        size = vec2(size)
+        self.size = size
         self.grid: defaultdict[vec2, tuple[T, ...]] = defaultdict(tuple)
         self.tiles_seen = set()
 
@@ -241,10 +240,6 @@ class GridCollider(Generic[T]):
         #
         x_fraction, x_integer = modf(pos.x)
         y_fraction, y_integer = modf(pos.y)
-        if pos.x < 0:
-            x_integer -= 1
-        if pos.y < 0:
-            y_integer -= 1
         pos_cell_coord = vec2(x_integer, y_integer)
         x_aligned = 0 if x_fraction else 1
         y_aligned = 0 if y_fraction else 1
@@ -406,16 +401,10 @@ class GridCollider(Generic[T]):
                 # moving right or down
                 # so we're detecting on the right/bottom edge
                 # so we're in cell 53 if  53.0 < coord <= 54.0
-                #
-                # these versions don't ahve to deal with negative
-                # numbers, because you can't start a frame with a
-                # negative pos, and if you're moving right or down
-                # you can't go negative.
                 sign = 1
                 towards = inf
                 # print(f"  check_moving_pawn_along_one_coordinate: moving right or down in {attr=}, {sign=} {towards=}")
                 def coord_to_cell(coord):
-                    assert coord >= 0
                     fractional, integer = modf(coord)
                     if fractional:
                         return integer
@@ -424,12 +413,11 @@ class GridCollider(Generic[T]):
                     # don't call this with a "cell"!
                     # 53.0 is in cell 52.
                     # always call this with a "coord".
-                    assert coord >= 0
                     fractional, integer = modf(coord)
                     if fractional:
                         integer += 1
                     return nextafter(integer, towards)
-                if 1:
+                if 0:
                     assert coord_to_cell(53.0) == 52
                     assert coord_to_cell(53.0000000001) == 53
                     assert coord_to_cell(53.9999999999) == 53
@@ -442,68 +430,43 @@ class GridCollider(Generic[T]):
                 # moving left or up
                 # so we're detecting on the left/top edge
                 # so we're in cell 53 if  53.0 <= coord < 54.0
-                #
-                # these versions have to deal with negative numbers.
                 sign = -1
                 towards = -inf
                 # print(f"  check_moving_pawn_along_one_coordinate: moving left or up in {attr=}, {sign=} {towards=}")
                 def coord_to_cell(coord):
                     # fractional, integer = modf(coord)
                     # return integer
-                    fractional, integer = modf(coord)
-                    if (coord < 0) and fractional:
-                        integer -= 1
-                    return integer
+                    return modf(coord)[1]
                 def first_value_in_next_cell(coord):
                     fractional, integer = modf(coord)
-                    if (coord < 0) and fractional:
-                        integer -= 1
                     return nextafter(integer, towards)
-                if 1:
+                if 0:
                     assert coord_to_cell(53.0) == 53
                     assert coord_to_cell(53.0000000001) == 53
                     assert coord_to_cell(53.9999999999) == 53
                     assert coord_to_cell(54.0) == 54
-                    assert coord_to_cell(0) == 0
-                    assert coord_to_cell(-0.5) == -1
-                    assert coord_to_cell(-1) == -1, f"{coord_to_cell(-1)=} != -1"
-                    assert coord_to_cell(-1.1) == -2
                     assert first_value_in_next_cell(53.0) == nextafter(53, -inf)
                     assert first_value_in_next_cell(53.0000000001) == nextafter(53, -inf)
                     assert first_value_in_next_cell(53.9999999999) == nextafter(53, -inf)
                     assert first_value_in_next_cell(54.0) == nextafter(54, -inf)
-                    assert first_value_in_next_cell(0) == nextafter(0, -inf)
-                    assert first_value_in_next_cell(-0.1) == nextafter(-1, -inf)
-                    assert first_value_in_next_cell(-1) == nextafter(-1, -inf)
-                    assert coord_to_cell(first_value_in_next_cell(-1)) == coord_to_cell(-1) - 1
 
-            axis_pos = start
-            start_cell = coord_to_cell(start)
-            next_cell = start_cell + sign
-            pos_cell = coord_to_cell(getattr(pos, attr))
-            next_pos_cell = pos_cell + sign
-            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {axis_pos=} {scalar_delta=} {start_cell=} {next_cell=} {attr=} {pos=}")
+            coord = start
+            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {coord=} {scalar_delta=} {attr=} {pos=}")
 
             while True:
-                next_axis_pos = first_value_in_next_cell(axis_pos)
-                # print(f"      {attr!r} -- {axis_pos=} {next_axis_pos=} {next_cell=} {coord_to_cell(next_axis_pos)=}")
-                assert coord_to_cell(next_axis_pos) == next_cell
+                # print(f"      {attr!r} --")
 
-                tries_remaining = 10
+                next_coord = first_value_in_next_cell(coord)
+
                 while True:
-                    tries_remaining -= 1
-                    if not tries_remaining:
-                        import sys
-                        sys.exit("DAMMIT we couldn't find the next cell")
-
                     # find the lowest time t such that
-                    #     start + (scalar_delta * t) >= next_axis_pos
-                    t = (next_axis_pos - start) / scalar_delta
+                    #     start + (scalar_delta * t) >= next_coord
+                    t = (next_coord - start) / scalar_delta
                     # make sure it's properly reversible
-                    axis_pos_at_time_t = start + (scalar_delta * t)
-                    assert abs(axis_pos_at_time_t - next_axis_pos) < 0.000001
+                    coord_at_time_t = start + (scalar_delta * t)
+                    assert coord_at_time_t >= next_coord
 
-                    # print(f"      {attr!r} {axis_pos=} {next_axis_pos=} {t=} {axis_pos_at_time_t=}")
+                    # print(f"      {attr!r} {coord=} {next_coord=} {t=} {coord_at_time_t=}")
                     if t > 1:
                         # print(f"      {attr!r} {t=} > 1, done")
                         return
@@ -511,21 +474,11 @@ class GridCollider(Generic[T]):
                     new_pos = pos + (delta * t)
 
                     # slight hack here:
-                    # ensure that we really moved into the next cell
-                    #
-                    # the problem is, when we're crossing zero,
-                    # nextafter() is returning INCREDIBLY tiny numbers
-                    # we deal with numbers that are so small,
-                    # adding or subtracting them with even-slightly-larger
-                    # numbers means the result is thrown away.
-                    if coord_to_cell(getattr(new_pos, attr)) != next_pos_cell:
-                        # fake it
-                        pos_value = getattr(new_pos, attr)
-                        desired = first_value_in_next_cell(pos_value)
-                        if attr == 'x':
-                            new_pos = vec2(desired, new_pos.y)
-                        else:
-                            new_pos = vec2(new_pos.x, desired)
+                    # ensure that new_pos has a fractional component
+                    value = getattr(new_pos, attr)
+                    if not modf(value)[0]:
+                        next_coord = nextafter(next_coord, towards)
+                        continue
                     break
 
                 hits = self.collide_pawn(pawn, pos=new_pos)
@@ -534,9 +487,7 @@ class GridCollider(Generic[T]):
                     # print(f"{attr!r} found! {(t, new_pos, hits)=}")
                     yield (t, new_pos, hits)
 
-                axis_pos += sign
-                next_cell += sign
-                next_pos_cell += sign
+                coord += sign
 
         if delta.x >= 0:
             # moving right, check right edge
