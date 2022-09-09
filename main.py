@@ -223,7 +223,7 @@ class Switch(Block):
                 scene.layers[sprite_layer].add_sprite(self.on_image, anchor_x=0, anchor_y=0),
                 lights.add_sprite(
                     'point_light',
-                    color=(*color_to_rgb[color], 0.8),
+                    color=(*color_to_rgb[color], 1),
                     pos=TILE_DIMS / 2,
                 )
             ],
@@ -233,7 +233,13 @@ class Switch(Block):
 
     def on_touched(self):
         new_state = level.toggle_color(self.color)
-        self.sprite.image = self.on_image if new_state else self.off_image
+        sprite, light = self.sprite
+        if new_state:
+            sprite.image = self.on_image
+            light.alpha = 0.1
+        else:
+            sprite.image = self.off_image
+            light.alpha = 0.4
 
 
 def background_block(image, x, y=None):
@@ -544,7 +550,6 @@ class Player:
                 self.jump_start_pos = self.pos
                 self._jumps_remaining -= 1
 
-
                 level.nursery.do(puff(
                     self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
                     vel=vec2(-2 * TILE_SIZE * self.v.x, 5)
@@ -606,6 +611,11 @@ class Player:
         jumped = False
 
         coyote_time_until = 0
+
+        # The set of things we are already touching.
+        # We only fire on_touched() events for objects that we are newly
+        # touching.
+        touching = set()
 
         def print(*a): pass
         #print = builtins.print
@@ -675,25 +685,27 @@ class Player:
             checking_for_collisions = True
 
             found_a_solid_collision = False
+
             while checking_for_collisions:
                 for t, collision_pos, hit in level.collision_grid.collide_moving_pawn(
                     self,
                     delta,
                 ):
                     solid_tiles = []
-                    passthrough_tiles = []
+                    passthrough_tiles = set()
 
                     for tile in hit:
                         assert hasattr(tile, 'solid')
                         if tile.solid:
                             solid_tiles.append(tile)
                         else:
-                            passthrough_tiles.append(tile)
+                            passthrough_tiles.add(tile)
 
                     if not solid_tiles:
                         print(f"{t=} collision with only passthrough tiles.")
-                        for tile in passthrough_tiles:
+                        for tile in passthrough_tiles - touching:
                             tile.on_touched()
+                        touching = passthrough_tiles
                         continue
 
                     found_a_solid_collision = True
