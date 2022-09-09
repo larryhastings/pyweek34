@@ -1,13 +1,13 @@
 import bisect
 import builtins
 import math
+import os
 from pathlib import Path
 import collision
 from pytiled_parser import parse_map
 import random
 import sys
-from typing import Any, Optional
-import typing
+from typing import Optional
 import wasabi2d.loop
 from wasabi2d.clock import Clock
 import wasabi2d as w2d
@@ -429,7 +429,7 @@ class Level:
                         continue
                     tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
                     tile = tiles[tile_id]
-                    image = tile.image
+                    image = tile.image.replace('/', os.sep)
                     assert image
 
                     if block_type_override:
