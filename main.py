@@ -299,18 +299,12 @@ class Level:
             self.nursery.do(run_lives())
 
     def toggle_color(self, color):
+        assert color != "gray"
         old_state = self.color_state[color]
         new_state = not old_state
         self.color_state[color] = new_state
         scene.layers[color_to_layer[color]].visible = new_state
         scene.layers[color_to_layer[color] + 1].visible = old_state
-
-        if not new_state:
-            print(f"FIXME: remove {color} blocks")
-            #space.remove(*self.color_to_shapes[color])
-        else:
-            print(f"FIXME: add {color} blocks")
-            #space.add(*self.color_to_shapes[color])
 
         return new_state
 
@@ -637,7 +631,7 @@ class Player:
             if 1:
                 hits = level.collision_grid.collide_pawn(self)
                 if hits:
-                    solid_hits = [tile for tile in hits if tile.solid]
+                    solid_hits = [tile for tile in hits if tile.solid and level.color_state[tile.color]]
                     if solid_hits:
                         print = builtins.print
                         print(f"shouldn't be touching anything solid right now!")
@@ -702,7 +696,8 @@ class Player:
                     for tile in hit:
                         assert hasattr(tile, 'solid')
                         if tile.solid:
-                            solid_tiles.append(tile)
+                            if level.color_state[tile.color]:
+                                solid_tiles.append(tile)
                         else:
                             passthrough_tiles.add(tile)
 
