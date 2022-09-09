@@ -1,0 +1,132 @@
+A quick treatise about collision in this game.
+by Larry Hastings
+
+We start every game-logic frame not currently colliding with any solid
+object.  By keeping this strictly invariant, we avoid bugs e.g. you
+get stuck "inside" geometry (wall / ceiling / floor).
+
+Every frame that we're not rising, we're falling.  When you're standing
+on solid ground, gravity pulls you towards the floor, so you collide
+with the floor, we notice, and that's one more frame the game considers
+you to be on solid ground.  Once you run off the edge, the game notices
+"hey we didn't collide with the ground this frame!" and puts you into
+falling state (actually "coyote time").
+
+The main collision code, GridCollider.collide_moving_pawn, takes the
+pawn's starting position, its size, and the delta vector it's moving
+along in the current frame.  There are probably baked-in assumptions
+that the size is 1x1 right now, oops.  (Works fine for the game, and
+it's PyWeek, so...)  Similarly, the collider assumes the coordinate
+system of wasabi2d, which has the origin at the upper-left.  So (5, 3)
+is above (5, 4).
+
+The collider considers a pawn of size (1, 1) to not collide at its
+right and bottom edges.  That is, if the pawn is at (53.0, 29.0),
+it's colliding with the tile at (53, 29), but it is *not* colliding
+with the tiles at (54.0, 29.0) or (53.0, 30.0), much less (54.0, 30.0).
+However, if we move the tile slightly both down and right, to
+(53.001, 29.001), it would now be colliding with all those tiles.
+
+GridCollider.collide_moving_pawn returns a interable of all the
+resulting collisions found when moving pawn along that path,
+including the time that the collision happened, the position the pawn
+was at when the collision happened, and all the tiles that the pawn
+collided with simultaneously.
+
+The time of the collision represents the fraction of delta that was
+applied:
+        t=0.0 -> pawn.pos + (delta * 0.0)  == pawn.pos
+        t=0.5 -> pawn.pos + (delta * 0.5)
+        t=1.0 -> pawn.pos + (delta * 1.0)  == pawn.pos + delta
+
+The time t is calculated so exactly, you can calculate
+        previous_t = math.nextafter(t, -inf)
+to calculate the immediate previous time, at which point
+there should be no collisions.  And that's what the collision
+response code does.  If the player collides with a solid object,
+we move the player back to the position immediately *before* the
+collision--literally by calculating the previous t and computing
+"new_pos = starting_pos + (delta * t)".  We then handle all the
+collisions and compute the resulting new delta.  If we hit a wall,
+we stop moving in x, and if we hit the floor or ceiling we stop
+moving in y.  We then loop and call collide_moving_pawn again,
+starting from this new position and with the remaining delta,
+in case there are any more collisions.
+
+Why do we need to loop?
+
+     pawn
+     +---+       |
+     |   |       |
+     +---+       |
+          \      |
+-----------\-----+
+            \
+             \
+              \
+               \   <- delta
+                \
+                 \
+                  \
+                  _\|
+
+If this was one frame, the pawn would hit the floor early, at maybe t=0.2.
+We'd throw away the remaining vertical movement, but the pawn would
+still have all that horizontal movement.  And at maybe t=0.75 it hits
+the wall.  We need to redo all our collision calculation after handling
+the first collision in order to handle the second one.
+
+
+How do you figure out if you hit a wall, the floor, the ceiling, or a
+corner?
+
+First of all, you can reduce the scope of the problem a great deal,
+because
+        a) you always start every frame not colliding with anything, and
+        b) you only hit things because you're moving.
+This lets you simplify what scenarios you consider.  You don't have
+to consider every possible tile around the character, you only need
+to consider the tiles you might have moved into:
+        if delta={0, 0}, you can't collide with anything.
+          you're not moving.
+        if delta={0, positive}, you're moving straight up,
+          you can only collide with tiles directly above.
+          they must be the ceiling.
+        if delta={positive, 0}, you're moving straight right
+          you can only collide with tiles to your right.
+          they must be a wall.
+        if delta={positive, positive}, you're moving up and
+          right.  you can only collide with tiles above (ceiling),
+          to the right (wall), or on the corner (both?)
+This is symmetric around x and y.  If delta={0, negative}, you're
+moving straight down, you can only collide with tiles directly
+below, they must be the floor.
+
+So if only one value in delta is nonzero, it's totally easy.
+The complex case is when both values in delta are nonzero.
+but even that isn't too hard.
+
+You iterate over all the tiles you collide with, and figure
+out whether, at the point that you weren't colliding, whether
+they overlapped you in x or y.
+    if they overlapped you in X, they were already
+      above/below you, they're a floor or ceiling.
+    if they overlapped you in Y, they were already
+      to the left or right of you, they're a wall.
+    if they didn't overlap you in X or Y, they're
+      a corner.
+    (it's not possible for them to overlap you in
+     both X and Y at that point--remember, we moved
+     you back until before you were colliding.)
+
+The game remembers the result of all the collisions:
+did we hit a wall? did we hit a floor/ceiling? did
+we hit a corner?
+
+If we hit a wall or floor/ceiling, that takes
+precedence over corners, so we throw the corner hit
+away.
+
+If we only hit a corner, we must have been moving in
+both x and y.  y is more important, so we behave as
+if it was a hit in y.

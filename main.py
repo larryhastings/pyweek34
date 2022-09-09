@@ -689,11 +689,12 @@ class Player:
             checking_for_collisions = True
 
             found_a_solid_collision = False
+            delta_remaining = delta
 
             while checking_for_collisions:
                 for t, collision_pos, hit in level.collision_grid.collide_moving_pawn(
                     self,
-                    delta,
+                    delta_remaining,
                 ):
                     solid_tiles = []
                     passthrough_tiles = set()
@@ -715,7 +716,7 @@ class Player:
                     found_a_solid_collision = True
                     # okay, this collision will change our movement.
                     t_just_barely_before_the_collision = math.nextafter(t, -math.inf)
-                    self.pos += (delta * t_just_barely_before_the_collision)
+                    self.pos += (delta_remaining * t_just_barely_before_the_collision)
 
                     print("collision with solid tiles:")
                     print(f"    {collision_pos=}")
@@ -803,23 +804,27 @@ class Player:
 
                     if hit_corner:
                         # we must have only hit one tile, and it was a corner.
-                        # if we're moving in y, prefer that: stop y motion
-                        # and slide along in x.
-                        # if we're not moving in y, we have to stop in x.
+                        # we must be moving in both x and y.
+                        # y is more important, so we behave like
+                        # this is hitting floor/ceiling.
                         assert len(solid_tiles) == 1
-                        hit_y = bool(delta.y)
-                        hit_x = not hit_y
+                        assert bool(delta_remaining.x) and bool(delta_remaining.y)
+                        assert not (hit_x or hit_y)
+                        hit_y = True
                         print("hit corner, so {hit_x=} {hit_y=}")
 
                     if hit_x:
                         # stop sideways motion
                         print("  hit in x, stop sideways motion")
                         delta = vec2(0, delta.y)
+                        delta_remaining = vec2(0, delta_remaining.y)
 
                     if hit_y:
+                        # stop vertical motion
                         print("  hit in y, stop vertical motion")
                         if self.state == self.state_falling:
                             assert delta.y > 0
+                            assert delta_remaining.y > 0
                             self.state = self.state_on_ground
                             self._jumps_remaining = 2
 
@@ -842,8 +847,10 @@ class Player:
 
                         # stop vertical motion
                         delta = vec2(delta.x, 0)
+                        delta_remaining = vec2(delta_remaining.x, 0)
 
                     if delta == vec2_zero:
+                        assert delta_remaining == vec2_zero
                         checking_for_collisions = False
                 else:
                     checking_for_collisions = False
