@@ -741,6 +741,7 @@ class Player:
 
         async for _ in game_clock.coro.frames():
             tick += 1
+            new_touching = set()
             print(f"[{tick:05} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
 
             if 1:
@@ -852,7 +853,7 @@ class Player:
                         print(f"  collision with only passthrough tiles at {t=}")
                         for tile in passthrough_tiles - touching:
                             tile.on_touched()
-                        touching = passthrough_tiles
+                        new_touching.update(passthrough_tiles)
                         continue
 
                     found_a_solid_collision = True
@@ -1058,6 +1059,7 @@ class Player:
 
             # print(f"[{tick:06}] final {delta=}")
             self.v = delta
+            touching = new_touching
 
     async def camera_tracking(self):
         last_pos = target_pos = self.shape.pos
