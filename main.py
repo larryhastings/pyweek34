@@ -661,9 +661,12 @@ class Player:
 
                     if hit_corner:
                         # we must have only hit one tile, and it was a corner.
+                        # if we're moving in y, prefer that: stop y motion
+                        # and slide along in x.
+                        # if we're not moving in y, we have to stop in x.
                         assert len(solid_tiles) == 1
-                        hit_x = bool(delta.x)
                         hit_y = bool(delta.y)
+                        hit_x = not hit_y
                         print("hit corner, so {hit_x=} {hit_y=}")
 
                     if hit_x:
