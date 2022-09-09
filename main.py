@@ -429,7 +429,7 @@ class Level:
                         continue
                     tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
                     tile = tiles[tile_id]
-                    image = tile.image.replace('/', os.sep)
+                    image = tile.image
                     assert image
 
                     if block_type_override:
@@ -762,10 +762,19 @@ class Player:
                 if tick < coyote_time_until:
                     if (not(coyote_time_wall_last_x_direction_used)
                         or (coyote_time_wall_last_x_direction_used != coyote_time_wall_last_x_direction)):
-                        # okay, you can have it.
+                        # hey! you're using coyote time!
+                        print(f"[{tick:6}] // coyote time! //")
                         self._jumps_remaining = 2
                         coyote_time_wall_last_x_direction_used = coyote_time_wall_last_x_direction
                         coyote_time_until = -1
+                        # if you are jumping during coyote time,
+                        # warp you to max speed based on your current
+                        # indicated direction.
+                        x_direction = self.controller.x_axis()
+                        if x_direction:
+                            print(f"[{tick:6}] // coyote time warp speed! //")
+                            delta = vec2(x_direction * self.MAX_HORIZONTAL_SPEED, delta.y)
+
 
                 if self._jumps_remaining:
                     # print(f"--- jump start ---")
