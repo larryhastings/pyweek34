@@ -122,7 +122,11 @@ class GridCollider(Generic[T]):
     def collide_point(self, pos):
         return self.grid[vec2(modf(pos.x)[1], modf(pos.y)[1])]
 
-    def collide_moving_point(self, pos, delta):
+    def collide_moving_point(
+        self,
+        pos: vec2,
+        delta: vec2
+    ) -> Iterable[tuple[float, vec2, Sequence[T]]]:
         # todo:
         # maybe rewrite this someday with bresenham's line algorithm
 
