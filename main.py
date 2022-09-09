@@ -68,12 +68,15 @@ scene.background = (0.9, 0.9, 0.9)
 
 LIGHT_LAYER = 1000
 lights = scene.layers[LIGHT_LAYER]
+hud = scene.layers[LIGHT_LAYER + 1]
+hud.parallax = 0.0
 scene.chain = [
     w2d.chain.Light(
         light=w2d.chain.Layers([LIGHT_LAYER]),
         diffuse=w2d.chain.LayerRange(stop=LIGHT_LAYER - 1),
         ambient=(0.6, 0.3, 0.2, 1.0),
-    )
+    ),
+    w2d.chain.LayerRange(start=LIGHT_LAYER + 1)
 ]
 
 color_tile_maps = {}
@@ -1150,11 +1153,24 @@ class Player:
 
 async def run_lives():
     controller = Controller()
-    for _ in range(3):
-        pos = level.current_checkpoint.pos
-        global player
-        player = Player(pos, controller)
-        await player.run()
+
+    start = scene.dims * -0.5 + vec2(20, 20)
+    lives = [
+        hud.add_sprite(
+            "pixel_platformer/tiles/tile_0145",
+            pos=start + vec2(20 * i, 0)
+        ) for i in range(4)
+    ]
+    try:
+        while lives:
+            lives.pop().delete()
+            pos = level.current_checkpoint.pos
+            global player
+            player = Player(pos, controller)
+            await player.run()
+    finally:
+        for l in lives:
+            l.delete()
 
 
 async def drive_main_clock():
