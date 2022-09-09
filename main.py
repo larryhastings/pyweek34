@@ -446,6 +446,26 @@ async def shot(player: 'Player', direction: vec2):
             ns.do(w2d.animate(light, scale=1, duration=0.4))
 
 
+async def puff(pos: vec2, vel: vec2 = vec2(0, -8)):
+    """Draw a puff of smoke.
+
+    The supplied pos/vel are in world space coordinates, i.e. pixels.
+    """
+    with scene.layers[sprite_layer].add_sprite(
+        'smoke',
+        scale=0.2,
+        pos=pos,
+    ) as sprite:
+        await w2d.animate(
+            sprite,
+            duration=0.5,
+            tween='accelerate',
+            color=(1, 1, 1, 0),
+            pos=pos + vel,
+            scale=0.5,
+        )
+
+
 class Player:
     size = vec2(1, 1)
 
@@ -523,6 +543,12 @@ class Player:
                 self.state = self.state_start_jump
                 self.jump_start_pos = self.pos
                 self._jumps_remaining -= 1
+
+
+                level.nursery.do(puff(
+                    self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
+                    vel=vec2(-2 * TILE_SIZE * self.v.x, 5)
+                ))
 
     # Cells per second
     JUMP = vec2(0, -0.27)
