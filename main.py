@@ -224,6 +224,13 @@ class Collectable(Block):
             finally:
                 level.collectables -= 1
 
+            await w2d.animate(
+                sprite,
+                pos=sprite.pos + vec2(0, -40),
+                scale=1.5,
+                angle=-0.2,
+            )
+
 
 async def floating_wobble(
     sprite,
@@ -525,7 +532,7 @@ async def shoot(player: 'Player', direction: vec2):
                                 obj.on_touched()
                             new_touching.add(obj)
 
-                        case Block():
+                        case Block(solid=True):
                             ns.cancel()
 
             pos += delta
