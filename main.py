@@ -416,12 +416,13 @@ class Player:
         """Accelerate the player, including in the air."""
         async for _ in game_clock.coro.frames():
             x_axis = self.controller.x_axis()
+            speed_x = self.v.x
             if x_axis:
                 acceleration = self.controller.x_axis() * self.ACCEL_FORCE
-                speed_x = self.v.x + acceleration
+                speed_x += acceleration
                 speed_x = min(max(speed_x, -self.MAX_HORIZONTAL_SPEED), self.MAX_HORIZONTAL_SPEED)
             elif self.state == self.state_on_ground:
-                speed_x = self.v.x * self.GROUND_FRICTION
+                speed_x *= self.GROUND_FRICTION
                 if abs(speed_x) < 0.005:
                     speed_x = 0
             self.v = vec2(speed_x, self.v.y)
@@ -495,8 +496,13 @@ class Player:
         coyote_time_until = 0
 
         def print(*a): pass
-        # print = builtins.print
+        print = builtins.print
 
+        # HACK FOR DEBUG
+        if 0:
+            self.pos = vec2(+50.51000, +31.69000)
+            self.v = vec2(+0.16000, +0.42000)
+            self.state = self.state_falling
 
         async for _ in game_clock.coro.frames():
             tick += 1
