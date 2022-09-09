@@ -580,6 +580,7 @@ class Player:
 
         self.controller = controller
         self._jumps_remaining = 2
+        self.jump_requested = False
 
     async def handle_keys(self):
         key_to_action = {
@@ -634,17 +635,7 @@ class Player:
     async def jump(self):
         while True:
             await self.controller.jump()
-            if self._jumps_remaining:
-                # print(f"--- jump start ---")
-                self.v += self.JUMP
-                self.state = self.state_start_jump
-                self.jump_start_pos = self.pos
-                self._jumps_remaining -= 1
-
-                level.nursery.do(puff(
-                    self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
-                    vel=vec2(-2 * TILE_SIZE * self.v.x, 5)
-                ))
+            self.jump_requested = True
 
     # Cells per second
     JUMP = vec2(0, -0.27)
@@ -664,7 +655,7 @@ class Player:
 
     MAX_HORIZONTAL_SPEED = 0.4
 
-    GROUND_FRICTION_FACTOR = 0.82 # delta.x multiplied by this every tick
+    GROUND_FRICTION_FACTOR = 0.80 # delta.x multiplied by this every tick
 
     WALL_FRICTION_MAX_SPEED = TERMINAL_VELOCITY / 5
 
@@ -672,16 +663,23 @@ class Player:
     HANG_TIME_TICKS = int( 0.07 * 60 )
     #                           ^^^^ times ticks per second
 
-    #                        vvvv  coyote time in seconds
+    #                               vvvv  ground coyote time in seconds
     COYOTE_TIME_TICKS = int( 0.05 * 60 )
-    #                             ^^^^ times ticks per second
+    #                                    ^^^^ times ticks per second
+    # coyote time is how much coyote time you get after
+    # running off the ground (off a ledge) or pushing off a wall
+    # (wall sliding, and then no longer wall sliding).
+
 
     state_start_jump = "start jump"
     state_rising = "rising"
     state_hang_time = "hang time"
     state_falling = "falling"
     state_on_ground = "on ground"
-    state_coyote_time = "coyote time"
+
+    # wall scraping and coyote time don't have their own state.
+    # wall scraping just means you reduce downward y if you're falling and touched a wall.
+    # coyote time is a timeout that restores your double jump while you're in the air.
 
     @property
     def pos(self) -> vec2:
@@ -705,7 +703,9 @@ class Player:
 
         jumped = False
 
-        coyote_time_until = 0
+        coyote_time_until = -1
+        coyote_time_wall_last_x_direction = None
+        coyote_time_wall_last_x_direction_used = None
 
         # The set of things we are already touching.
         # We only fire on_touched() events for objects that we are newly
@@ -755,12 +755,30 @@ class Player:
                 delta = vec2(delta.x, 0)
             else:
                 gravity = falling_gravity
-                if self.state == self.state_coyote_time:
-                    if tick >= coyote_time_until:
-                        self.state = self.state_falling
-                        if self._jumps_remaining == 2:
-                            self._jumps_remaining = 1
 
+            if self.jump_requested:
+                self.jump_requested = False
+
+                if tick < coyote_time_until:
+                    if (not(coyote_time_wall_last_x_direction_used)
+                        or (coyote_time_wall_last_x_direction_used != coyote_time_wall_last_x_direction)):
+                        # okay, you can have it.
+                        self._jumps_remaining = 2
+                        coyote_time_wall_last_x_direction_used = coyote_time_wall_last_x_direction
+                        coyote_time_until = -1
+
+                if self._jumps_remaining:
+                    # print(f"--- jump start ---")
+                    delta += self.JUMP
+                    self.state = self.state_start_jump
+                    self.jump_start_pos = self.pos
+                    self._jumps_remaining -= 1
+                    jumped = True
+
+                    level.nursery.do(puff(
+                        self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
+                        vel=vec2(-2 * TILE_SIZE * self.v.x, 5)
+                    ))
 
             delta += gravity
 
@@ -770,7 +788,6 @@ class Player:
                     hang_time_timer = self.HANG_TIME_TICKS
                     hang_time_start_tick = tick
                     max_height = abs(self.pos.y - self.jump_start_pos.y)
-                    jumped = True
             elif self.state == self.state_hang_time:
                 hang_time_timer -= 1
                 if not hang_time_timer:
@@ -786,7 +803,9 @@ class Player:
             found_a_solid_collision = False
             delta_remaining = delta
 
+            print("  ** start checking for collisions **")
             while checking_for_collisions:
+                print(f"  check for collisions with {self.pos=} {delta_remaining=}")
                 for t, collision_pos, hit in level.collision_grid.collide_moving_pawn(
                     self,
                     delta_remaining,
@@ -803,7 +822,7 @@ class Player:
                             passthrough_tiles.add(tile)
 
                     if not solid_tiles:
-                        print(f"{t=} collision with only passthrough tiles.")
+                        print(f"  collision with only passthrough tiles at {t=}")
                         for tile in passthrough_tiles - touching:
                             tile.on_touched()
                         touching = passthrough_tiles
@@ -814,8 +833,9 @@ class Player:
                     t_just_barely_before_the_collision = math.nextafter(t, -math.inf)
                     self.pos += (delta_remaining * t_just_barely_before_the_collision)
 
-                    print("collision with solid tiles:")
-                    print(f"    {collision_pos=}")
+                    print(f"  collision with solid tiles at {t=}:")
+                    print(f"      {collision_pos=}")
+                    print(f"      move back to {self.pos=}")
 
                     # old collision detection trick.
                     # do two lines overlap?  it's easy.
@@ -912,8 +932,10 @@ class Player:
                     if hit_x:
                         # stop sideways motion
                         # but also! cap vertical motion ("wall scrape")
+                        assert delta.x
+                        assert delta_remaining.x
                         print("  hit in x, stop sideways motion, also cap vertical motion ('wall scrape')")
-                        print(f"    before hit in x: {delta=} {delta_remaining}  {self.WALL_FRICTION_MAX_SPEED=}")
+                        print(f"    before hit in x: {delta=} {delta_remaining=}  {self.WALL_FRICTION_MAX_SPEED=}")
                         max_y_velocity = self.WALL_FRICTION_MAX_SPEED
 
                         # wall scrape ONLY affects downward speed.
@@ -926,23 +948,31 @@ class Player:
                             t_remaining = delta_remaining_y / delta_y
                             delta_remaining_y = min(delta_remaining_y, max_y_velocity * t_remaining)
                             delta_y = min(delta_y, max_y_velocity)
+
+                        coyote_time_until = tick + self.COYOTE_TIME_TICKS
+                        coyote_time_wall_last_x_direction = 1 if delta.x > 0 else -1
+
                         delta_remaining = vec2(0, delta_remaining_y)
                         delta = vec2(0, delta_y)
-                        print(f"    after hit in x: {delta=} {delta_remaining}")
+
+                        print(f"    after hit in x: {delta=} {delta_remaining=}")
 
                     if hit_y:
                         # stop vertical motion
                         print("  hit in y, stop vertical motion")
                         if self.state == self.state_falling:
+                            print("    ... and we're back on the ground.")
                             assert delta.y > 0
                             assert delta_remaining.y > 0
                             self.state = self.state_on_ground
                             self._jumps_remaining = 2
+                            coyote_time_wall_last_x_direction = None
+                            coyote_time_wall_last_x_direction_used = None
 
                             if jumped:
                                 jumped = False
                                 rising_time = (hang_time_start_tick - jump_start_tick) * dt
-                                assert (falling_time_start_tick - hang_time_start_tick) == self.HANG_TIME_TICKS, f"({falling_time_start_tick=} - {hang_time_start_tick=}) != {self.HANG_TIME_TICKS=} !!!"
+                                # assert (falling_time_start_tick - hang_time_start_tick) == self.HANG_TIME_TICKS, f"({falling_time_start_tick=} - {hang_time_start_tick=}) != {self.HANG_TIME_TICKS=} !!!"
                                 hang_time = self.HANG_TIME_TICKS * dt
                                 falling_time = (tick - falling_time_start_tick) * dt
                                 total_jump_time = rising_time + hang_time + falling_time
@@ -963,18 +993,29 @@ class Player:
                     if delta == vec2_zero:
                         assert delta_remaining == vec2_zero, f"{delta_remaining=} != vec2_zero!"
                         checking_for_collisions = False
+
+                    # this break is for the current collide_moving_pawn iterator.
+                    # we changed direction, we need to loop around and
+                    # start a fresh collide_moving_pawn iterator with our new delta.
+                    break
                 else:
                     checking_for_collisions = False
 
-                if (not found_a_solid_collision) and (self.state == self.state_on_ground):
-                    # hey, wait! we're supposed to always collide with the ground!
-                    # we must have fallen off the edge!
-                    self.state = self.state_coyote_time
-                    coyote_time_until = tick + self.COYOTE_TIME_TICKS
-                    assert self._jumps_remaining == 2
-                    self._jumps_remaining = 1
+            if (not found_a_solid_collision) and (self.state == self.state_on_ground):
+                # hey, wait! if we're standing on the ground,
+                # we should collide with the ground in every tick!
 
-                self.pos += delta
+                # we must have fallen off the edge!
+                self.state = self.state_falling
+
+                # take away the jump (leaving just the double jump)...
+                assert self._jumps_remaining == 2, f"{self._jumps_remaining=} but should be 2!"
+                self._jumps_remaining = 1
+
+                # ... but let them have coyote time.
+                coyote_time_until = tick + self.COYOTE_TIME_TICKS
+
+            self.pos += delta
 
             print(f"[{tick:05}   end] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) {delta.y=:+2.5f}")
 

@@ -3,7 +3,7 @@
         "height": 4300,
         "width": 2
     },
-    "activeFile": "level_test.tmx",
+    "activeFile": "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx",
     "expandedProjectPaths": [
         "."
     ],
@@ -24,7 +24,7 @@
             "selectedLayer": 1,
             "viewCenter": {
                 "x": 900.6980609418284,
-                "y": 524.1440443213296
+                "y": 450.74792243767314
             }
         }
     },
@@ -40,14 +40,14 @@
     "map.width": 80,
     "openFiles": [
         "level_test.tmx",
-        "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx",
-        "/home/larry/src/pyweek34/images/Color Shatter.tsx"
+        "/home/larry/src/pyweek34/images/Color Shatter.tsx",
+        "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx"
     ],
     "project": "level_test.tiled-project",
     "recentFiles": [
+        "level_test.tmx",
         "/home/larry/src/pyweek34/images/Color Shatter.tsx",
-        "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx",
-        "level_test.tmx"
+        "/home/larry/src/pyweek34/images/pixel_platformer/Pixel Platformer.tsx"
     ],
     "tileset.embedInMap": false,
     "tileset.lastUsedFilter": "Tiled tileset files (*.tsx *.xml)",
