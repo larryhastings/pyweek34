@@ -1,4 +1,5 @@
 import bisect
+import builtins
 import math
 from pathlib import Path
 import collision
@@ -16,6 +17,7 @@ from wasabigeom import vec2
 # import after wasabi2d, this suppresses the PyGame stdout message
 import pygame
 
+vec2_zero = vec2(0, 0)
 
 TILE_SIZE: int = 18
 FRICTION: float = 0.1
@@ -81,7 +83,11 @@ class Block:
             tile_map[x, y] = f"{color}_off_20"
 
         level.collision_grid.add(self)
+        self.solid = True
         level.color_to_shapes[color].append(self)
+
+    def on_touched(self):
+        pass
 
 
 class Checkpoint(Block):
@@ -98,6 +104,9 @@ class Checkpoint(Block):
         # tile_map = gray_tile_map
         # tile_map[x, y] = image
         self.sprite = scene.layers[gray_layer].add_sprite(self.deselected_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+
+        level.collision_grid.add(self)
+        self.solid = False
 
         if initial:
             self.on_touched()
@@ -124,6 +133,9 @@ class Collectable(Block):
 
         self.image = image
         self.pos = position
+
+        level.collision_grid.add(self)
+        self.solid = False
 
     def on_touched(self):
         self.nursery.cancel()
@@ -171,6 +183,9 @@ class Switch(Block):
         self.color = color
         self.on_image = f"{color}_switch_on"
         self.off_image = f"{color}_switch_off"
+
+        level.collision_grid.add(self)
+        self.solid = False
 
         self.sprite = scene.layers[sprite_layer].add_sprite(self.on_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
         # set initial wobble
@@ -358,16 +373,17 @@ class Player:
 
     def __init__(self, pos: vec2, controller: Controller):
         self.v = vec2(0, 0)
-        self.shape = scene.layers[player_layer].add_star(
-            pos=pos * TILE_SIZE,
-            points=6,
-            outer_radius=cell_size, inner_radius=cell_size / 2, fill=True, color=(0.5, 0.5, 0.5)
-        )
+        self.shape = scene.layers[player_layer].add_sprite("pixel_platformer/tiles/tile_0145", pos=pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        # self.shape = scene.layers[player_layer].add_star(
+        #     pos=pos * TILE_SIZE,
+        #     points=6,
+        #     outer_radius=cell_size / 2, inner_radius=cell_size / 4, fill=True, color=(0.5, 0.5, 0.5)
+        # )
 
         scene.camera.pos = self.shape.pos
 
         self.controller = controller
-        self._jumps_remaining = 2e50 # 2
+        self._jumps_remaining = 2
 
     async def handle_keys(self):
         key_to_action = {
@@ -404,9 +420,9 @@ class Player:
                 acceleration = self.controller.x_axis() * self.ACCEL_FORCE
                 speed_x = self.v.x + acceleration
                 speed_x = min(max(speed_x, -self.MAX_HORIZONTAL_SPEED), self.MAX_HORIZONTAL_SPEED)
-            else:
-                speed_x = self.v.x / 2
-                if speed_x < 0.05:
+            elif self.state == self.state_on_ground:
+                speed_x = self.v.x * self.GROUND_FRICTION
+                if abs(speed_x) < 0.005:
                     speed_x = 0
             self.v = vec2(speed_x, self.v.y)
 
@@ -415,26 +431,44 @@ class Player:
         while True:
             await self.controller.jump()
             if self._jumps_remaining:
+                # print(f"--- jump start ---")
                 self.v += self.JUMP
+                self.state = self.state_start_jump
+                self.jump_start_pos = self.pos
                 self._jumps_remaining -= 1
 
     # Cells per second
-    JUMP = vec2(0, -1.3)
+    JUMP = vec2(0, -0.27)
 
     # Cells per second per second
-    RISING_GRAVITY = vec2(0, 6)
+    RISING_GRAVITY = vec2(0, 0.8)
 
     # Cells per second per second
-    FALLING_GRAVITY = vec2(0, 8)
+    FALLING_GRAVITY = vec2(0, 1.8)
 
     # The plane that kills you
     DEATH_PLANE = 600.0
 
     TERMINAL_VELOCITY = 100.0
 
-    ACCEL_FORCE = 0.1
+    ACCEL_FORCE = 0.01
 
-    MAX_HORIZONTAL_SPEED = 0.5
+    MAX_HORIZONTAL_SPEED = 0.4
+
+    GROUND_FRICTION = 0.82 # delta.x multiplied by this every tick
+
+    #                      vvvv  hang time in seconds
+    HANG_TIME_TICKS = int( 0.07 * 60 )
+
+    #                        vvvv  coyote time in seconds
+    COYOTE_TIME_TICKS = int( 0.05 * 60 )
+
+    state_start_jump = "start jump"
+    state_rising = "rising"
+    state_hang_time = "hang time"
+    state_falling = "falling"
+    state_on_ground = "on ground"
+    state_coyote_time = "coyote time"
 
     @property
     def pos(self) -> vec2:
@@ -452,38 +486,242 @@ class Player:
         death_plane = level.map_size.y
         rising_gravity = self.RISING_GRAVITY * dt
         falling_gravity = self.FALLING_GRAVITY * dt
+
+        self.state = self.state_on_ground
+        assert self._jumps_remaining == 2
+
+        jumped = False
+
+        coyote_time_until = 0
+
+        def print(*a): pass
+        # print = builtins.print
+
+
         async for _ in game_clock.coro.frames():
+            tick += 1
+
+            if 1:
+                hits = level.collision_grid.collide_pawn(self)
+                if hits:
+                    solid_hits = [tile for tile in hits if tile.solid]
+                    assert not solid_hits, f"shouldn't be touching anything solid right now! {solid_hits=}"
+
             delta = self.v
-            # print(f"[{tick:06}] {delta=}")
 
-            gravity = rising_gravity if delta.y < 0 else falling_gravity
+            if self.state == self.state_start_jump:
+                self.state = self.state_rising
+                jump_start_tick = tick
+                gravity = rising_gravity
+            elif self.state == self.state_rising:
+                gravity = rising_gravity
+            elif self.state == self.state_hang_time:
+                gravity = vec2_zero
+                delta = vec2(delta.x, 0)
+            else:
+                gravity = falling_gravity
+                if self.state == self.state_coyote_time:
+                    if tick >= coyote_time_until:
+                        self.state = self.state_falling
+                        if self._jumps_remaining == 2:
+                            self._jumps_remaining = 1
+
+
             delta += gravity
-            if delta.y > self.TERMINAL_VELOCITY:
-                delta = vec2(delta.x, self.TERMINAL_VELOCITY)
 
-            # print(f"[{tick:06}] {self.pos=} {delta=}:")
+            if self.state == self.state_rising:
+                if delta.y >= 0:
+                    self.state = self.state_hang_time
+                    hang_time_timer = self.HANG_TIME_TICKS
+                    hang_time_start_tick = tick
+                    max_height = abs(self.pos.y - self.jump_start_pos.y)
+                    jumped = True
+            elif self.state == self.state_hang_time:
+                hang_time_timer -= 1
+                if not hang_time_timer:
+                    self.state = self.state_falling
+                    falling_time_start_tick = tick
+            else:
+                if delta.y > self.TERMINAL_VELOCITY:
+                    delta = vec2(delta.x, self.TERMINAL_VELOCITY)
 
-            for t, pos, hit in level.collision_grid.collide_moving_pawn(
-                self,
-                delta,
-            ):
-                # print(f"[{tick:06}] collision at {t=} {pos=}:")
-                for tile in hit:
+            starting_pos = self.pos
+            checking_for_collisions = True
+
+            found_a_solid_collision = False
+            while checking_for_collisions:
+                for t, collision_pos, hit in level.collision_grid.collide_moving_pawn(
+                    self,
+                    delta,
+                ):
+                    solid_tiles = []
+                    passthrough_tiles = []
+
+                    for tile in hit:
+                        assert hasattr(tile, 'solid')
+                        if tile.solid:
+                            solid_tiles.append(tile)
+                        else:
+                            passthrough_tiles.append(tile)
+
+                    if not solid_tiles:
+                        print(f"{t=} collision with only passthrough tiles.")
+                        for tile in passthrough_tiles:
+                            tile.on_touched()
+                        continue
+
+                    found_a_solid_collision = True
+                    # okay, this collision will change our movement.
                     t_just_barely_before_the_collision = math.nextafter(t, -math.inf)
-                    self.pos = self.pos + (delta * t_just_barely_before_the_collision)
-                    delta = vec2(delta.x, 0)
-                break
-            self.pos += delta
+                    self.pos += (delta * t_just_barely_before_the_collision)
+
+                    print("collision with solid tiles:")
+                    print(f"    {collision_pos=}")
+
+                    # old collision detection trick.
+                    # do two lines overlap?  it's easy.
+                    #
+                    # consider all the possible relationships the two lines could
+                    # have to each other, and whether or not they are touching.
+                    #
+                    # legend:
+                    #     ---- line 1
+                    #     ==== line 2
+                    #
+                    # scenario 1: line 1 completely to the left - NOT TOUCHING
+                    #        -----
+                    #              ======
+                    #
+                    # scenario 2: line 1 overlapping on the left - touching
+                    #        --------
+                    #              ======
+                    #
+                    # scenario 3: line 1 completely the same - touching
+                    #              ------
+                    #              ======
+                    #
+                    # scenario 4: line 2 is entirely inside line 1 - touching
+                    #              ------
+                    #               ====
+                    #
+                    # scenario 5: line 1 is entirely inside line 2 - touching
+                    #              -----
+                    #             =======
+                    #
+                    # scenario 6: line 1 overlapping on the right - touching
+                    #              ----------
+                    #             =======
+                    #
+                    # scenario 7: line 1 completely to the right - NOT TOUCHING
+                    #                      -------
+                    #             =======
+                    #
+                    # now notice: they are not touching in the first and last scenarios,
+                    # and touch in every other scenario.  So: test for the first and
+                    # last scenarios, and if neither of those are true, they're touching,
+                    # and you probably don't care in what way.
+
+                    # special-cased for this game
+                    assert self.size == vec2(1, 1)
+                    def pawn_overlaps_tile_in_x(tile):
+                        return not ( ((self.pos.x + 1) <= tile.pos.x) or (self.pos.x >= (tile.pos.x + 1)) )
+                    def pawn_overlaps_tile_in_y(tile):
+                        return not ( ((self.pos.y + 1) <= tile.pos.y) or (self.pos.y >= (tile.pos.y + 1)) )
+
+                    hit_corner = hit_x = hit_y = False
+
+                    for tile in solid_tiles:
+                        tile.on_touched()
+
+                        # these are all calculated based on the just-before-collision position.
+                        tile_overlaps_in_x = pawn_overlaps_tile_in_x(tile)
+                        tile_overlaps_in_y = pawn_overlaps_tile_in_y(tile)
+                        print(f"    {tile.pos=} {tile=} {tile_overlaps_in_x=} {tile_overlaps_in_y=}")
+
+                        if tile_overlaps_in_x:
+                            hit_y = True
+                            assert not tile_overlaps_in_y
+                        elif tile_overlaps_in_y:
+                            hit_x = True
+                            assert not tile_overlaps_in_x
+                        else:
+                            # neither
+                            assert not (tile_overlaps_in_x or tile_overlaps_in_y)
+                            hit_corner = True
+
+                    if hit_x:
+                        # if we hit multiple tiles, and one was a hit in x,
+                        # and another was corner, ignore the corner.
+                        hit_corner = False
+
+                    if hit_y:
+                        # if we hit multiple tiles, and one was a hit in y,
+                        # and another was corner, ignore the corner.
+                        hit_corner = False
+
+                    if hit_corner:
+                        # we must have only hit one tile, and it was a corner.
+                        assert len(solid_tiles) == 1
+                        hit_x = bool(delta.x)
+                        hit_y = bool(delta.y)
+                        print("hit corner, so {hit_x=} {hit_y=}")
+
+                    if hit_x:
+                        # stop sideways motion
+                        print("  hit in x, stop sideways motion")
+                        delta = vec2(0, delta.y)
+
+                    if hit_y:
+                        print("  hit in y, stop vertical motion")
+                        if self.state == self.state_falling:
+                            assert delta.y > 0
+                            self.state = self.state_on_ground
+                            self._jumps_remaining = 2
+
+                            if jumped:
+                                jumped = False
+                                rising_time = (hang_time_start_tick - jump_start_tick) * dt
+                                assert (falling_time_start_tick - hang_time_start_tick) == self.HANG_TIME_TICKS, f"({falling_time_start_tick=} - {hang_time_start_tick=}) != {self.HANG_TIME_TICKS=} !!!"
+                                hang_time = self.HANG_TIME_TICKS * dt
+                                falling_time = (tick - falling_time_start_tick) * dt
+                                total_jump_time = rising_time + hang_time + falling_time
+                                print("  jump stats:")
+                                print(f"  {rising_time     = :1.5f}")
+                                print(f"  {hang_time       = :1.5f}")
+                                print(f"  {falling_time    = :1.5f}")
+                                print(f"  {total_jump_time = :1.5f}")
+                                print()
+
+                                print(f"{max_height      = :1.5f}")
+                                # sys.exit(0)
+
+                        # stop vertical motion
+                        delta = vec2(delta.x, 0)
+
+                    if delta == vec2_zero:
+                        checking_for_collisions = False
+                else:
+                    checking_for_collisions = False
+
+                if (not found_a_solid_collision) and (self.state == self.state_on_ground):
+                    # hey, wait! we're supposed to always collide with the ground!
+                    # we must have fallen off the edge!
+                    self.state = self.state_coyote_time
+                    coyote_time_until = tick + self.COYOTE_TIME_TICKS
+                    assert self._jumps_remaining == 2
+                    self._jumps_remaining = 1
+
+                self.pos += delta
+
+            print(f"[{tick:04}] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) {delta.y=:+2.5f}")
 
             # check if the player has fallen below the death plane
-            if pos.y >= death_plane:
+            if self.pos.y >= death_plane:
                 # death!
                 self.nursery.cancel()
 
             # print(f"[{tick:06}] final {delta=}")
             self.v = delta
-
-            tick = tick + 1
 
     async def camera_tracking(self):
         last_pos = target_pos = self.shape.pos
