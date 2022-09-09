@@ -236,10 +236,10 @@ class Switch(Block):
         sprite, light = self.sprite
         if new_state:
             sprite.image = self.on_image
-            light.alpha = 0.1
+            light.alpha = 1.0
         else:
             sprite.image = self.off_image
-            light.alpha = 0.4
+            light.alpha = 0.6
 
 
 def background_block(image, x, y=None):
