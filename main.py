@@ -6,7 +6,7 @@ import collision
 from pytiled_parser import parse_map
 import random
 import sys
-from typing import Any
+from typing import Any, Optional
 import typing
 import wasabi2d.loop
 from wasabi2d.clock import Clock
@@ -25,7 +25,7 @@ GRAVITY: float = 20
 TILE_DIMS: vec2 = vec2(TILE_SIZE, TILE_SIZE)
 
 game = None
-level = None
+level: Optional['Level'] = None
 player = None
 
 gamedir_path = Path(sys.argv[0]).resolve().parent
@@ -72,7 +72,7 @@ scene.chain = [
     w2d.chain.Light(
         light=w2d.chain.Layers([LIGHT_LAYER]),
         diffuse=w2d.chain.LayerRange(stop=LIGHT_LAYER - 1),
-        ambient=(0.6, 0.6, 0.6, 1.0),
+        ambient=(0.6, 0.3, 0.2, 1.0),
     )
 ]
 
@@ -275,10 +275,10 @@ class Switch(Block):
         sprite, light = self.sprite
         if new_state:
             sprite.image = self.on_image
-            light.alpha = 0.1
+            light.alpha = 1.0
         else:
             sprite.image = self.off_image
-            light.alpha = 0.4
+            light.alpha = 0.6
 
 
 def background_block(image, x, y=None):
@@ -484,10 +484,11 @@ class Controller:
 
 async def shoot(player: 'Player', direction: vec2):
     """Fire a shot."""
-    SPEED = 600
+    SPEED = 30
 
     rgb = (1, 1, 1)
 
+    pos = player.pos + vec2(0.5, 0.5)
     sprite = w2d.Group([
             laser := scene.layers[player_layer].add_sprite(
                 'laser',
@@ -500,11 +501,33 @@ async def shoot(player: 'Player', direction: vec2):
                 scale=0.3,
             )
         ],
-        pos=player.pos * TILE_SIZE,
+        pos=pos * TILE_SIZE,
     )
+
     async def animate_pos():
+        nonlocal pos
+        assert level
+
+        touching = set()
         async for dt in game_clock.coro.frames_dt(seconds=2):
-            sprite.pos += direction * SPEED * dt
+            delta = direction * SPEED * dt
+            collisions = level.collision_grid.collide_moving_point(pos, delta)
+
+            new_touching = set()
+            for t, loc, hits in collisions:
+                for obj in hits:
+                    match obj:
+                        case Switch():
+                            if obj not in touching:
+                                obj.on_touched()
+                            new_touching.add(obj)
+
+                        case Block():
+                            ns.cancel()
+
+            pos += delta
+            sprite.pos = pos * TILE_SIZE
+            touching = new_touching
 
     async def animate_color(obj, max=1):
         await w2d.animate(obj, color=(*rgb, max), duration=0.2)
@@ -589,7 +612,7 @@ class Player:
         while True:
             await self.controller.shoot()
             level.nursery.do(shoot(self, vec2(self.facing, 0)))
-            await game_clock.coro.sleep(0.3)
+            await game_clock.coro.sleep(0.15)
 
     async def accel(self):
         """Accelerate the player, including in the air."""
