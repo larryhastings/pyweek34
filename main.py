@@ -63,6 +63,7 @@ scene = w2d.Scene(
     width=scene_width,
     height=scene_height,
     ##scaler='nearest'
+    title="The Red Planet",
 )
 scene.background = (0.9, 0.9, 0.9)
 
