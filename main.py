@@ -659,15 +659,19 @@ class Player:
     WALL_FRICTION_MAX_SPEED = TERMINAL_VELOCITY / 5
 
     #                      vvvv  hang time in seconds
-    HANG_TIME_TICKS = int( 0.07 * 60 )
+    HANG_TIME_TICKS = int( 0.07 * 60)
     #                           ^^^^ times ticks per second
 
-    #                               vvvv  ground coyote time in seconds
-    COYOTE_TIME_TICKS = int( 0.05 * 60 )
-    #                                    ^^^^ times ticks per second
+    #                        vvvv  coyote time in seconds
+    COYOTE_TIME_TICKS = int( 0.05 * 60)
+    #                             ^^^^ times ticks per second
     # coyote time is how much coyote time you get after
     # running off the ground (off a ledge) or pushing off a wall
     # (wall sliding, and then no longer wall sliding).
+
+    #                       vvvv  jump buffer in seconds
+    JUMP_BUFFER_TICKS = int(0.05 * 60)
+    #                            ^^^^ times ticks per second
 
 
     state_start_jump = "start jump"
@@ -701,6 +705,7 @@ class Player:
         assert self._jumps_remaining == 2
 
         jumped = False
+        jump_buffered_until = -1
 
         coyote_time_until = -1
         coyote_time_wall_last_x_direction = None
@@ -775,13 +780,17 @@ class Player:
                             delta = vec2(x_direction * self.MAX_HORIZONTAL_SPEED, delta.y)
 
 
-                if self._jumps_remaining:
-                    # print(f"--- jump start ---")
+                if not self._jumps_remaining:
+                    print("jump buffering")
+                    jump_buffered_until = tick + self.JUMP_BUFFER_TICKS
+                else:
+                    print(f"--- jump start ---")
                     delta += self.JUMP
                     self.state = self.state_start_jump
                     self.jump_start_pos = self.pos
                     self._jumps_remaining -= 1
                     jumped = True
+                    jump_buffered_until = -1
 
                     level.nursery.do(puff(
                         self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
@@ -959,6 +968,8 @@ class Player:
 
                         coyote_time_until = tick + self.COYOTE_TIME_TICKS
                         coyote_time_wall_last_x_direction = 1 if delta.x > 0 else -1
+                        if tick < jump_buffered_until:
+                            self.jump_requested = True # boing!
 
                         delta_remaining = vec2(0, delta_remaining_y)
                         delta = vec2(0, delta_y)
@@ -976,6 +987,9 @@ class Player:
                             self._jumps_remaining = 2
                             coyote_time_wall_last_x_direction = None
                             coyote_time_wall_last_x_direction_used = None
+
+                            if tick < jump_buffered_until:
+                                self.jump_requested = True # boing!
 
                             if jumped:
                                 jumped = False
