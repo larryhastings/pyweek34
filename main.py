@@ -618,13 +618,17 @@ class Player:
         touching = set()
 
         def print(*a): pass
-        #print = builtins.print
+        # print = builtins.print
 
         # HACK FOR DEBUG
         if 0:
-            self.pos = vec2(+50.78826, +28.14333)
-            self.v = vec2(+0.00000, -0.32667)
-            self.state = self.state_rising
+            self.pos = vec2(+22.06014, +29.00000)
+            self.v = vec2(+0.07014, -0.27000)
+            self.state = self.state_start_jump
+
+            hang_time_timer = self.HANG_TIME_TICKS
+            self.jump_start_pos = self.pos
+
 
         async for _ in game_clock.coro.frames():
             tick += 1

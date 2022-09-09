@@ -394,46 +394,86 @@ class GridCollider(Generic[T]):
 
         def check_moving_pawn_along_one_coordinate(start, scalar_delta, attr):
             if scalar_delta == 0:
+                # print("check_moving_pawn_along_one_coordinate in {attr=}, scalar_delta == 0, nothing to do. exiting.")
                 return
 
-            assert scalar_delta
             if scalar_delta > 0:
+                # moving right or down
+                # so we're detecting on the right/bottom edge
+                # so we're in cell 53 if  53.0 < coord <= 54.0
                 sign = 1
                 towards = inf
+                # print(f"  check_moving_pawn_along_one_coordinate: moving right or down in {attr=}, {sign=} {towards=}")
+                def coord_to_cell(coord):
+                    fractional, integer = modf(coord)
+                    if fractional:
+                        return integer
+                    return integer - 1
+                def first_value_in_next_cell(coord):
+                    # don't call this with a "cell"!
+                    # 53.0 is in cell 52.
+                    # always call this with a "coord".
+                    fractional, integer = modf(coord)
+                    if fractional:
+                        integer += 1
+                    return nextafter(integer, towards)
+                if 0:
+                    assert coord_to_cell(53.0) == 52
+                    assert coord_to_cell(53.0000000001) == 53
+                    assert coord_to_cell(53.9999999999) == 53
+                    assert coord_to_cell(54.0) == 53
+                    assert first_value_in_next_cell(53.0) == nextafter(53, inf)
+                    assert first_value_in_next_cell(53.0000000001) == nextafter(54, inf)
+                    assert first_value_in_next_cell(53.9999999999) == nextafter(54, inf)
+                    assert first_value_in_next_cell(54.0) == nextafter(54, inf)
             else:
+                # moving left or up
+                # so we're detecting on the left/top edge
+                # so we're in cell 53 if  53.0 <= coord < 54.0
                 sign = -1
                 towards = -inf
-            # how far do we have to move initially to push this edge to border on its first new cell?
-            fractional, integer = modf(start)
-            edge_aligned = 0 if fractional else 1
-            if edge_aligned:
-                coord = start
-            else:
-                coord = integer + sign
+                # print(f"  check_moving_pawn_along_one_coordinate: moving left or up in {attr=}, {sign=} {towards=}")
+                def coord_to_cell(coord):
+                    # fractional, integer = modf(coord)
+                    # return integer
+                    return modf(coord)[1]
+                def first_value_in_next_cell(coord):
+                    fractional, integer = modf(coord)
+                    return nextafter(integer, towards)
+                if 0:
+                    assert coord_to_cell(53.0) == 53
+                    assert coord_to_cell(53.0000000001) == 53
+                    assert coord_to_cell(53.9999999999) == 53
+                    assert coord_to_cell(54.0) == 54
+                    assert first_value_in_next_cell(53.0) == nextafter(53, -inf)
+                    assert first_value_in_next_cell(53.0000000001) == nextafter(53, -inf)
+                    assert first_value_in_next_cell(53.9999999999) == nextafter(53, -inf)
+                    assert first_value_in_next_cell(54.0) == nextafter(54, -inf)
 
-            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {scalar_delta=} {attr=}")
+            coord = start
+            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {coord=} {scalar_delta=} {attr=} {pos=}")
 
             while True:
-                # print(f"      --")
+                # print(f"      {attr!r} --")
 
-                # now scootch it just a teensy bit further, so we're intruding into that cell
-                next_coord = nextafter(coord, towards)
+                next_coord = first_value_in_next_cell(coord)
 
                 while True:
                     # find the lowest time t such that
                     #     start + (scalar_delta * t) >= next_coord
                     t = (next_coord - start) / scalar_delta
-                    if t > 1:
-                        return
-
                     # make sure it's properly reversible
                     coord_at_time_t = start + (scalar_delta * t)
-
-                    # print(f"      {coord=} {next_coord=} {t=} {coord_at_time_t=}")
-
                     assert coord_at_time_t >= next_coord
 
+                    # print(f"      {attr!r} {coord=} {next_coord=} {t=} {coord_at_time_t=}")
+                    if t > 1:
+                        # print(f"      {attr!r} {t=} > 1, done")
+                        return
+
                     new_pos = pos + (delta * t)
+
+                    # slight hack here:
                     # ensure that new_pos has a fractional component
                     value = getattr(new_pos, attr)
                     if not modf(value)[0]:
@@ -442,14 +482,13 @@ class GridCollider(Generic[T]):
                     break
 
                 hits = self.collide_pawn(pawn, pos=new_pos)
-                # print(f"      {delta=} {new_pos=} {(pos + size) + (delta * t)=} {hits=}")
+                # print(f"      {attr!r} {delta=} {new_pos=} {(pos + size) + (delta * t)=} {hits=}")
                 if hits:
-                    # print("found! {(t, new_pos, hits)=}")
+                    # print(f"{attr!r} found! {(t, new_pos, hits)=}")
                     yield (t, new_pos, hits)
 
                 coord += sign
 
-        iterators = []
         if delta.x >= 0:
             # moving right, check right edge
             x_iterator = check_moving_pawn_along_one_coordinate(top_right.x, delta.x, 'x')
