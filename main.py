@@ -98,19 +98,44 @@ class Block:
         self.color = color
 
         # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
-        tile_map = color_tile_maps[color]
-        tile_map[x, y] = image
+        if image is not None:
+            tile_map = color_tile_maps[color]
+            tile_map[x, y] = image
 
-        if color != 'gray':
-            tile_map = color_off_tile_maps[color]
-            tile_map[x, y] = f"{color}_off_20"
+            if color != 'gray':
+                tile_map = color_off_tile_maps[color]
+                tile_map[x, y] = f"{color}_off_20"
 
         level.collision_grid.add(self)
         self.solid = True
         level.color_to_shapes[color].append(self)
 
+    def __repr_pos__(self):
+        return f"({int(self.pos.x):3}, {int(self.pos.y):3})"
+
+    def __repr__(self):
+        return f"<Block {self.__repr_pos__()} {self.color}>"
+
     def on_touched(self):
         pass
+
+class Death(Block):
+    solid = True
+    color = 'gray'
+
+    def __init__(self, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        level.collision_grid.add(self)
+
+    def __repr__(self):
+        return f"<Death {self.__repr_pos__()}>"
+
+    def on_touched(self):
+        player.nursery.cancel()
 
 
 class Checkpoint(Block):
@@ -141,6 +166,10 @@ class Checkpoint(Block):
             level.current_checkpoint = self
             self.sprite.image = self.selected_image
 
+    def __repr__(self):
+        current = "current" if level.current_checkpoint == self else "unselected"
+        return f"<Checkpoint {self.__repr_pos__()} {current}>"
+
     def on_deselected(self):
         self.sprite.image = self.deselected_image
 
@@ -156,11 +185,17 @@ class Collectable(Block):
 
         self.image = image
         self.pos = position
+        self.collected = False
 
         level.collision_grid.add(self)
         self.solid = False
 
+    def __repr__(self):
+        current = "collected" if self.collected == self else "uncollected"
+        return f"<Collectable {self.__repr_pos__()} {current}>"
+
     def on_touched(self):
+        self.collected = True
         self.nursery.cancel()
 
     async def run(self):
@@ -231,6 +266,10 @@ class Switch(Block):
         )
         # set initial wobble
 
+    def __repr__(self):
+        current = "on" if self.sprite[0].image == self.on_image else "off"
+        return f"<Switch {self.__repr_pos__()} {self.color} {current}>"
+
     def on_touched(self):
         new_state = level.toggle_color(self.color)
         sprite, light = self.sprite
@@ -288,8 +327,6 @@ class Level:
         self.current_checkpoint = None
         self.physical_objects = {}
 
-        self.collision_grid = collision.GridCollider((1000, 1000))
-
     async def run(self):
         global player
         objects = self.load_map("test")
@@ -314,6 +351,42 @@ class Level:
 
         self.map_size = vec2(level_map.map_size)
         self.map_size_in_screen = self.map_size * TILE_SIZE
+
+        # print(f"loaded map, size {self.map_size}")
+
+        self.collision_grid = collision.GridCollider(self.map_size + vec2(2, 2), origin=vec2(-1, -1))
+
+        # don't ever let the player leave the map.
+        # add a perimeter of blocks around the level:
+        #
+        #  bbbbbbbbbbbbbbbb
+        #  b              b
+        #  b              b  <-'b' means a normal Block
+        #  b              b
+        #  XXXXXXXXXXXXXXXX  <-'X' means a Death block
+
+        upper_left = self.collision_grid.upper_left
+        lower_right = self.map_size
+        # print(f"{upper_left=}")
+        # print(f"{lower_right=}")
+        y = int(upper_left.y)
+        for x in range(int(upper_left.x), int(lower_right.x) + 1):
+            # blocks add themselves to the collision grid
+            b = Block("gray", None, x, y)
+            # print("added top barrier", b)
+
+        x_left = int(upper_left.x)
+        x_right = int(lower_right.x)
+        for y in range(int(upper_left.y + 1), int(lower_right.y)):
+            b = Block("gray", None, x_left, y)
+            # print("added left barrier", b)
+            b = Block("gray", None, x_right, y)
+            # print("added right barrier", b)
+
+        y = int(lower_right.y)
+        for x in range(int(upper_left.x), int(lower_right.x) + 1):
+            b = Death(x, y)
+            # print("added bottom barrier", b)
 
         global scene_camera_bounding_box
         scene_camera_bounding_box = wasabigeom.Rect(
@@ -409,7 +482,7 @@ class Controller:
         await w2d.next_event(pygame.KEYDOWN, key=w2d.keys.RETURN.value)
 
 
-async def shot(player: 'Player', direction: vec2):
+async def shoot(player: 'Player', direction: vec2):
     """Fire a shot."""
     SPEED = 600
 
@@ -515,7 +588,7 @@ class Player:
     async def shoot(self):
         while True:
             await self.controller.shoot()
-            level.nursery.do(shot(self, vec2(self.facing, 0)))
+            level.nursery.do(shoot(self, vec2(self.facing, 0)))
             await game_clock.coro.sleep(0.3)
 
     async def accel(self):
@@ -529,7 +602,7 @@ class Player:
                 speed_x += acceleration
                 speed_x = min(max(speed_x, -self.MAX_HORIZONTAL_SPEED), self.MAX_HORIZONTAL_SPEED)
             elif self.state == self.state_on_ground:
-                speed_x *= self.GROUND_FRICTION
+                speed_x *= self.GROUND_FRICTION_FACTOR
                 if abs(speed_x) < 0.005:
                     speed_x = 0
             self.v = vec2(speed_x, self.v.y)
@@ -556,24 +629,28 @@ class Player:
     RISING_GRAVITY = vec2(0, 0.8)
 
     # Cells per second per second
-    FALLING_GRAVITY = vec2(0, 1.8)
+    FALLING_GRAVITY = vec2(0, 1.1)
 
-    # The plane that kills you
-    DEATH_PLANE = 600.0
-
-    TERMINAL_VELOCITY = 100.0
+    #                   vvv cells per second
+    TERMINAL_VELOCITY = 20.0 / 60
+    #                        ^^^^ divide by ticks per second (aka multiply by seconds per tick)
+    # so this is cells per tick.
 
     ACCEL_FORCE = 0.01
 
     MAX_HORIZONTAL_SPEED = 0.4
 
-    GROUND_FRICTION = 0.82 # delta.x multiplied by this every tick
+    GROUND_FRICTION_FACTOR = 0.82 # delta.x multiplied by this every tick
+
+    WALL_FRICTION_MAX_SPEED = TERMINAL_VELOCITY / 5
 
     #                      vvvv  hang time in seconds
     HANG_TIME_TICKS = int( 0.07 * 60 )
+    #                           ^^^^ times ticks per second
 
     #                        vvvv  coyote time in seconds
     COYOTE_TIME_TICKS = int( 0.05 * 60 )
+    #                             ^^^^ times ticks per second
 
     state_start_jump = "start jump"
     state_rising = "rising"
@@ -616,9 +693,9 @@ class Player:
 
         # HACK FOR DEBUG
         if 0:
-            self.pos = vec2(+22.06014, +29.00000)
-            self.v = vec2(+0.07014, -0.27000)
-            self.state = self.state_start_jump
+            self.pos = vec2(+0.34889, +20.53333)
+            self.v = vec2(-0.35374, -0.20667)
+            self.state = self.state_rising
 
             hang_time_timer = self.HANG_TIME_TICKS
             self.jump_start_pos = self.pos
@@ -626,7 +703,7 @@ class Player:
 
         async for _ in game_clock.coro.frames():
             tick += 1
-            print(f"[{tick:04} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
+            print(f"[{tick:05} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
 
             if 1:
                 hits = level.collision_grid.collide_pawn(self)
@@ -810,9 +887,24 @@ class Player:
 
                     if hit_x:
                         # stop sideways motion
-                        print("  hit in x, stop sideways motion")
-                        delta = vec2(0, delta.y)
-                        delta_remaining = vec2(0, delta_remaining.y)
+                        # but also! cap vertical motion ("wall scrape")
+                        print("  hit in x, stop sideways motion, also cap vertical motion ('wall scrape')")
+                        print(f"    before hit in x: {delta=} {delta_remaining}  {self.WALL_FRICTION_MAX_SPEED=}")
+                        max_y_velocity = self.WALL_FRICTION_MAX_SPEED
+
+                        # wall scrape ONLY affects downward speed.
+                        # reminder: coordinate system has 0 at TOP left
+                        # so delta.y >= means falling.
+                        delta_remaining_y = delta_remaining.y
+                        delta_y = delta.y
+                        if delta_remaining_y > 0:
+                            assert delta_y > 0
+                            t_remaining = delta_remaining_y / delta_y
+                            delta_remaining_y = min(delta_remaining_y, max_y_velocity * t_remaining)
+                            delta_y = min(delta_y, max_y_velocity)
+                        delta_remaining = vec2(0, delta_remaining_y)
+                        delta = vec2(0, delta_y)
+                        print(f"    after hit in x: {delta=} {delta_remaining}")
 
                     if hit_y:
                         # stop vertical motion
@@ -845,7 +937,7 @@ class Player:
                         delta_remaining = vec2(delta_remaining.x, 0)
 
                     if delta == vec2_zero:
-                        assert delta_remaining == vec2_zero
+                        assert delta_remaining == vec2_zero, f"{delta_remaining=} != vec2_zero!"
                         checking_for_collisions = False
                 else:
                     checking_for_collisions = False
@@ -860,12 +952,12 @@ class Player:
 
                 self.pos += delta
 
-            print(f"[{tick:04}   end] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) {delta.y=:+2.5f}")
+            print(f"[{tick:05}   end] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) {delta.y=:+2.5f}")
 
             # check if the player has fallen below the death plane
-            if self.pos.y >= death_plane:
-                # death!
-                self.nursery.cancel()
+            # if self.pos.y >= death_plane:
+            #     # death!
+            #     self.nursery.cancel()
 
             # print(f"[{tick:06}] final {delta=}")
             self.v = delta
@@ -996,6 +1088,7 @@ async def run_lives():
     controller = Controller()
     for _ in range(3):
         pos = level.current_checkpoint.pos
+        global player
         player = Player(pos, controller)
         await player.run()
 
