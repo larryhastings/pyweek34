@@ -44,6 +44,15 @@ color_to_layer = {
     'purple': purple_layer,
     'gray': gray_layer,
 }
+color_to_rgb = {
+    'red': (1, 0, 0),
+    'orange': (1, 0.4, 0),
+    'yellow': (1, 0.9, 0),
+    'green': (0, 0.8, 0.1),
+    'blue': (0, 0.3, 0.9),
+    'purple': (0.8, 0, 1.0),
+    'gray': (0.6, 0.6, 0.6),
+}
 
 scene_width = 900
 scene_height = 540
@@ -210,7 +219,16 @@ class Switch(Block):
         level.collision_grid.add(self)
         self.solid = False
 
-        self.sprite = scene.layers[sprite_layer].add_sprite(self.on_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        self.sprite = w2d.Group([
+                scene.layers[sprite_layer].add_sprite(self.on_image, anchor_x=0, anchor_y=0),
+                lights.add_sprite(
+                    'point_light',
+                    color=(*color_to_rgb[color], 0.8),
+                    pos=TILE_DIMS / 2,
+                )
+            ],
+            pos=self.pos * TILE_SIZE,
+        )
         # set initial wobble
 
     def on_touched(self):
