@@ -22,6 +22,7 @@ vec2_zero = vec2(0, 0)
 TILE_SIZE: int = 18
 FRICTION: float = 0.1
 GRAVITY: float = 20
+TILE_DIMS: vec2 = vec2(TILE_SIZE, TILE_SIZE)
 
 game = None
 level = None
@@ -49,9 +50,22 @@ scene_height = 540
 
 scene_camera_bounding_box = None
 
-scene = w2d.Scene(scene_width, scene_height)
+scene = w2d.Scene(
+    width=scene_width,
+    height=scene_height,
+    ##scaler='nearest'
+)
 scene.background = (0.9, 0.9, 0.9)
 
+LIGHT_LAYER = 1000
+lights = scene.layers[LIGHT_LAYER]
+scene.chain = [
+    w2d.chain.Light(
+        light=w2d.chain.Layers([LIGHT_LAYER]),
+        diffuse=w2d.chain.LayerRange(stop=LIGHT_LAYER - 1),
+        ambient=(0.6, 0.6, 0.6, 1.0),
+    )
+]
 
 color_tile_maps = {}
 color_off_tile_maps = {}
@@ -141,12 +155,21 @@ class Collectable(Block):
         self.nursery.cancel()
 
     async def run(self):
-        with scene.layers[sprite_layer].add_sprite(
-            self.image,
+        sprite = w2d.Group([
+                scene.layers[sprite_layer].add_sprite(
+                    self.image,
+                    anchor_x=0,
+                    anchor_y=0
+                ),
+                lights.add_sprite(
+                    'point_light',
+                    pos=TILE_DIMS / 2,
+                    color=(1, 1, 1, 0.3),
+                ),
+            ],
             pos=self.pos * TILE_SIZE,
-            anchor_x=0,
-            anchor_y=0
-        ) as sprite:
+        )
+        with sprite:
             level.collectables += 1
             try:
                 async with w2d.Nursery() as self.nursery:
@@ -368,11 +391,49 @@ class Controller:
         await w2d.next_event(pygame.KEYDOWN, key=w2d.keys.RETURN.value)
 
 
+async def shot(player: 'Player', direction: vec2):
+    """Fire a shot."""
+    SPEED = 600
+
+    rgb = (1, 1, 1)
+
+    sprite = w2d.Group([
+            laser := scene.layers[player_layer].add_sprite(
+                'laser',
+                angle=direction.angle(),
+                color=(*rgb, 0),
+            ),
+            light := lights.add_sprite(
+                'point_light',
+                color=(*rgb, 0),
+                scale=0.3,
+            )
+        ],
+        pos=player.pos * TILE_SIZE,
+    )
+    async def animate_pos():
+        async for dt in game_clock.coro.frames_dt(seconds=2):
+            sprite.pos += direction * SPEED * dt
+
+    async def animate_color(obj, max=1):
+        await w2d.animate(obj, color=(*rgb, max), duration=0.2)
+        await game_clock.coro.sleep(0.4)
+        await w2d.animate(obj, color=(*rgb, 0), duration=1.4)
+
+    with sprite:
+        async with w2d.Nursery() as ns:
+            ns.do(animate_pos())
+            ns.do(animate_color(laser))
+            ns.do(animate_color(light, max=0.3))
+            ns.do(w2d.animate(light, scale=1, duration=0.4))
+
+
 class Player:
     size = vec2(1, 1)
 
     def __init__(self, pos: vec2, controller: Controller):
         self.v = vec2(0, 0)
+        self.facing = 1
         self.shape = scene.layers[player_layer].add_sprite("pixel_platformer/tiles/tile_0145", pos=pos * TILE_SIZE, anchor_x=0, anchor_y=0)
         # self.shape = scene.layers[player_layer].add_star(
         #     pos=pos * TILE_SIZE,
@@ -408,9 +469,16 @@ class Player:
                 self.nursery = ns
                 ns.do(self.accel())
                 ns.do(self.jump())
+                ns.do(self.shoot())
                 ns.do(self.run_physics())
                 ns.do(self.camera_tracking())
                 ns.do(self.handle_keys())
+
+    async def shoot(self):
+        while True:
+            await self.controller.shoot()
+            level.nursery.do(shot(self, vec2(self.facing, 0)))
+            await game_clock.coro.sleep(0.3)
 
     async def accel(self):
         """Accelerate the player, including in the air."""
@@ -418,6 +486,7 @@ class Player:
             x_axis = self.controller.x_axis()
             speed_x = self.v.x
             if x_axis:
+                self.facing = math.copysign(1.0, x_axis)
                 acceleration = self.controller.x_axis() * self.ACCEL_FORCE
                 speed_x += acceleration
                 speed_x = min(max(speed_x, -self.MAX_HORIZONTAL_SPEED), self.MAX_HORIZONTAL_SPEED)
@@ -426,7 +495,6 @@ class Player:
                 if abs(speed_x) < 0.005:
                     speed_x = 0
             self.v = vec2(speed_x, self.v.y)
-
 
     async def jump(self):
         while True:
@@ -496,7 +564,7 @@ class Player:
         coyote_time_until = 0
 
         def print(*a): pass
-        print = builtins.print
+        #print = builtins.print
 
         # HACK FOR DEBUG
         if 0:
