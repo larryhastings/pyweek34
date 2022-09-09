@@ -252,18 +252,22 @@ class GridCollider(Generic[T]):
         elif (pawn.size.x == 1) and (pawn.size.y == 1):
             # somewhat optimized code path
             tiles = self.grid[pos_cell_coord]
+            # print(f"somewhat {pos_cell_coord=} {tiles=}")
             if tiles:
                 append(tiles)
             if not x_aligned:
                 tiles = self.grid[pos_cell_coord + vec2_1_0]
+                # print(f" not x {tiles=}")
                 if tiles:
                     append(tiles)
             if not y_aligned:
                 tiles = self.grid[pos_cell_coord + vec2_0_1]
+                # print(f" not y {tiles=}")
                 if tiles:
                     append(tiles)
                 if not x_aligned:
                     tiles = self.grid[pos_cell_coord + vec2_1_1]
+                    # print(f" neither {tiles=}")
                     if tiles:
                         append(tiles)
         else:
@@ -277,6 +281,7 @@ class GridCollider(Generic[T]):
                         append(tiles)
 
         if not hits:
+            # print("return None")
             return None
         # this is the fastest way to flatten a list of tuples.
         # (don't bother to turn it into a tuple.)
@@ -387,7 +392,7 @@ class GridCollider(Generic[T]):
         candidates = []
 
 
-        def check_moving_pawn_along_one_coordinate(start, scalar_delta):
+        def check_moving_pawn_along_one_coordinate(start, scalar_delta, attr):
             if scalar_delta == 0:
                 return
 
@@ -406,7 +411,7 @@ class GridCollider(Generic[T]):
             else:
                 coord = integer + sign
 
-            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {scalar_delta=}")
+            # print(f"  check_moving_pawn_along_one_coordinate: {start=} {scalar_delta=} {attr=}")
 
             while True:
                 # print(f"      --")
@@ -414,22 +419,30 @@ class GridCollider(Generic[T]):
                 # now scootch it just a teensy bit further, so we're intruding into that cell
                 next_coord = nextafter(coord, towards)
 
-                # find the lowest time t such that
-                #     start + (scalar_delta * t) >= next_coord
-                t = (next_coord - start) / scalar_delta
-                if t > 1:
+                while True:
+                    # find the lowest time t such that
+                    #     start + (scalar_delta * t) >= next_coord
+                    t = (next_coord - start) / scalar_delta
+                    if t > 1:
+                        return
+
+                    # make sure it's properly reversible
+                    coord_at_time_t = start + (scalar_delta * t)
+
+                    # print(f"      {coord=} {next_coord=} {t=} {coord_at_time_t=}")
+
+                    assert coord_at_time_t >= next_coord
+
+                    new_pos = pos + (delta * t)
+                    # ensure that new_pos has a fractional component
+                    value = getattr(new_pos, attr)
+                    if not modf(value)[0]:
+                        next_coord = nextafter(next_coord, towards)
+                        continue
                     break
 
-                # make sure it's properly reversible
-                coord_at_time_t = start + (scalar_delta * t)
-
-                # print(f"      {coord=} {next_coord=} {t=} {coord_at_time_t=}")
-
-                assert coord_at_time_t >= next_coord
-
-                new_pos = pos + (delta * t)
                 hits = self.collide_pawn(pawn, pos=new_pos)
-                # print(f"      {delta=} {new_pos=} {pos + size + (delta * t)=} {hits=}")
+                # print(f"      {delta=} {new_pos=} {(pos + size) + (delta * t)=} {hits=}")
                 if hits:
                     # print("found! {(t, new_pos, hits)=}")
                     yield (t, new_pos, hits)
@@ -439,17 +452,17 @@ class GridCollider(Generic[T]):
         iterators = []
         if delta.x >= 0:
             # moving right, check right edge
-            x_iterator = check_moving_pawn_along_one_coordinate(top_right.x, delta.x)
+            x_iterator = check_moving_pawn_along_one_coordinate(top_right.x, delta.x, 'x')
         else:
             # moving left, check left edge
-            x_iterator = check_moving_pawn_along_one_coordinate(pos.x, delta.x)
+            x_iterator = check_moving_pawn_along_one_coordinate(pos.x, delta.x, 'x')
 
         if delta.y >= 0:
             # moving up, check top edge
-            y_iterator = check_moving_pawn_along_one_coordinate(top_right.y, delta.y)
+            y_iterator = check_moving_pawn_along_one_coordinate(top_right.y, delta.y, 'y')
         else:
             # moving down, check bottom edge
-            y_iterator = check_moving_pawn_along_one_coordinate(pos.y, delta.y)
+            y_iterator = check_moving_pawn_along_one_coordinate(pos.y, delta.y, 'y')
 
         x = None
         y = None

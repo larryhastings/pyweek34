@@ -500,18 +500,26 @@ class Player:
 
         # HACK FOR DEBUG
         if 0:
-            self.pos = vec2(+50.51000, +31.69000)
-            self.v = vec2(+0.16000, +0.42000)
-            self.state = self.state_falling
+            self.pos = vec2(+50.78826, +28.14333)
+            self.v = vec2(+0.00000, -0.32667)
+            self.state = self.state_rising
 
         async for _ in game_clock.coro.frames():
             tick += 1
+            print(f"[{tick:04} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
 
             if 1:
                 hits = level.collision_grid.collide_pawn(self)
                 if hits:
                     solid_hits = [tile for tile in hits if tile.solid]
-                    assert not solid_hits, f"shouldn't be touching anything solid right now! {solid_hits=}"
+                    if solid_hits:
+                        print = builtins.print
+                        print(f"shouldn't be touching anything solid right now!")
+                        print(f"pawn {self.pos=} {self.v=}")
+                        print("tiles:")
+                        for tile in solid_hits:
+                            print(f"  {tile} {tile.pos}")
+                        sys.exit(0)
 
             delta = self.v
 
@@ -722,7 +730,7 @@ class Player:
 
                 self.pos += delta
 
-            print(f"[{tick:04}] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) {delta.y=:+2.5f}")
+            print(f"[{tick:04}   end] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) {delta.y=:+2.5f}")
 
             # check if the player has fallen below the death plane
             if self.pos.y >= death_plane:
