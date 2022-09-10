@@ -39,8 +39,8 @@ gamedir_path = Path(sys.argv[0]).resolve().parent
 
 colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'}
 
-layers = list(range(18))
-background_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, sprite_layer, player_layer, light_layer, hud_layer, = layers
+layers = list(range(19))
+background_layer, scenery_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, sprite_layer, player_layer, light_layer, hud_layer, = layers
 
 color_to_layer = {
     'red': red_layer,
@@ -561,10 +561,18 @@ def background_block(image, x, y=None):
     tile_map[x, y] = image
 
 
+def scenery_block(image, x, y=None):
+    if (y is None) and isinstance(x, vec2):
+        x, y = x
+    tile_map = scenery_tile_map
+    tile_map[x, y] = image
+
+
 
 cell_size = TILE_SIZE
 
 background_tile_map = scene.layers[background_layer].add_tile_map()
+scenery_tile_map = scene.layers[scenery_layer].add_tile_map()
 gray_tile_map = color_tile_maps['gray']
 
 main_clock = Clock()
@@ -714,10 +722,15 @@ class Level:
             if layer.name == "Background":
                 scene_layer = scene.layers[background_layer]
                 block_type_override = background_block
+            elif layer.name == "Scenery":
+                scene_layer = scene.layers[scenery_layer]
+                block_type_override = scenery_block
             elif layer.name == "Terrain":
                 scene_layer = scene.layers[gray_layer]
+            elif layer.name == "Sprites":
+                scene_layer = scene.layers[sprite_layer]
             else:
-                assert None, "unhandled layer name"
+                assert None, f"unhandled layer name: {layer.name}"
 
             for y, column in enumerate(layer.data):
                 for x, tile_id in enumerate(column):
