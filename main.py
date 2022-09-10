@@ -370,12 +370,15 @@ class Collectable(Block):
                 self.nursery.do(floating_wobble(sprite))
 
             pyfxrsounds.collect.play()
+
             await w2d.animate(
                 sprite,
-                pos=sprite.pos + vec2(0, -40),
+                duration=0.4,
+                pos=sprite.pos + vec2(0, -50),
                 scale=1.8,
                 angle=-0.2,
             )
+            await game_clock.coro.sleep(0.5)
 
 
 async def floating_wobble(
@@ -508,6 +511,7 @@ class Springboard(Block):
             self.sprite.image = self.high_image
             player.jump_forced = player.JUMP * 2
             player.v = vec2_zero
+            pyfxrsounds.spring.play()
 
     def on_touch_finished(self):
         self.state = "low"
@@ -1151,6 +1155,8 @@ class Player:
             else:
                 gravity = falling_gravity
 
+            jump_sound = True
+
             # if something external is making us jump
             # (e.g. a springboard)
             # reset delta.y, but also give back both jumps.
@@ -1164,6 +1170,7 @@ class Player:
                 self.jumps_remaining = 2
                 self.jump_requested = False
                 coyote_time_until = -1
+                jump_sound = False
 
             if self.jump_requested:
                 self.jump_requested = False
@@ -1201,10 +1208,11 @@ class Player:
                 jumped = True
                 jump_buffered_until = -1
 
-                if self.jumps_remaining:
-                    pyfxrsounds.jump1.play()
-                else:
-                    pyfxrsounds.jump2.play()
+                if jump_sound:
+                    if self.jumps_remaining:
+                        pyfxrsounds.jump1.play()
+                    else:
+                        pyfxrsounds.jump2.play()
 
                 level.nursery.do(puff(
                     self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),

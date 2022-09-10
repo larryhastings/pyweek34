@@ -54,3 +54,19 @@ death = pygame.mixer.Sound(buffer=pyfxr.SFX(
     pha_ramp=0.46,
     wave_type=pyfxr.WaveType.SINE,
 ))
+
+spring = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.34,
+    freq_ramp=-0.06,
+    duty=0.0,
+    vib_strength=0.46,
+    vib_speed=0.4,
+    env_attack=0.05,
+    env_sustain=0.0,
+    env_decay=0.72,
+    env_punch=0.17,
+    lpf_freq=1.0,
+    hpf_freq=0.16,
+    hpf_ramp=0.11,
+    wave_type=pyfxr.WaveType.SINE,
+))
