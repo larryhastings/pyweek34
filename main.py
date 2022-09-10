@@ -181,15 +181,23 @@ class Checkpoint(Block):
         level.collision_grid.add(self)
         self.solid = False
 
+        self.color_state = None
+
         if initial:
             self.on_touched()
 
     def on_touched(self):
-        if level.current_checkpoint != self:
+        changed_current_checkpoint = level.current_checkpoint != self
+        if changed_current_checkpoint:
             if level.current_checkpoint:
                 level.current_checkpoint.on_deselected()
             level.current_checkpoint = self
             self.sprite.image = self.selected_image
+        state_changed = self.save()
+
+        if changed_current_checkpoint or state_changed:
+            # DAN: add sparkle animation here
+            pass
 
     def __repr__(self):
         current = "current" if level.current_checkpoint == self else "unselected"
@@ -197,6 +205,17 @@ class Checkpoint(Block):
 
     def on_deselected(self):
         self.sprite.image = self.deselected_image
+
+    def save(self):
+        old_state = self.color_state
+        self.color_state = level.color_state.copy()
+        return self.color_state != old_state
+
+    def restore(self):
+        assert self.color_state
+        for color, state in self.color_state.items():
+            if level.color_state[color] != state:
+                level.toggle_color(color)
 
 
 class Collectable(Block):
@@ -458,6 +477,7 @@ class Level:
                         block = Checkpoint(image, x, y, initial=initial)
                         if initial:
                             self.current_checkpoint = block
+                            block.save()
                     elif object_type == "gem":
                         block = Collectable(image, x, y)
                     elif object_type == "switch":
@@ -1250,9 +1270,12 @@ async def run_lives():
     try:
         while lives:
             lives.pop().delete()
-            pos = level.current_checkpoint.pos
+
+            cp = level.current_checkpoint
+            cp.restore()
+
             global player
-            player = Player(pos, controller)
+            player = Player(cp.pos, controller)
             await player.run()
     finally:
         for l in lives:
