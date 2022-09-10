@@ -370,7 +370,7 @@ class Gem(Collectable):
 
     def on_touched(self, player, delta):
         if not self.collected:
-            super().on_touched()
+            super().on_touched(player, delta)
             level.gems -= 1
             level.on_level_completion_changed()
             self.collected = True
@@ -384,7 +384,7 @@ class ColorActuator(Collectable):
         assert color in color_to_layer
 
     def on_touched(self, player, delta):
-        super().on_touched()
+        super().on_touched(player, delta)
         level.have_color_actuator[self.color] = True
 
 
