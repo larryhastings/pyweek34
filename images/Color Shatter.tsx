@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="13" columns="0">
+<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="19" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <tile id="0">
   <properties>
@@ -102,5 +102,47 @@
    <property name="object" value="jump restore"/>
   </properties>
   <image width="18" height="18" source="jump_restore.png"/>
+ </tile>
+ <tile id="13">
+  <properties>
+   <property name="color" value="red"/>
+   <property name="object" value="color actuator"/>
+  </properties>
+  <image width="18" height="18" source="color_actuator_red.png"/>
+ </tile>
+ <tile id="14">
+  <properties>
+   <property name="color" value="orange"/>
+   <property name="object" value="color actuator"/>
+  </properties>
+  <image width="18" height="18" source="color_actuator_orange.png"/>
+ </tile>
+ <tile id="15">
+  <properties>
+   <property name="color" value="yellow"/>
+   <property name="object" value="color actuator"/>
+  </properties>
+  <image width="18" height="18" source="color_actuator_yellow.png"/>
+ </tile>
+ <tile id="16">
+  <properties>
+   <property name="color" value="green"/>
+   <property name="object" value="color actuator"/>
+  </properties>
+  <image width="18" height="18" source="color_actuator_green.png"/>
+ </tile>
+ <tile id="17">
+  <properties>
+   <property name="color" value="blue"/>
+   <property name="object" value="color actuator"/>
+  </properties>
+  <image width="18" height="18" source="color_actuator_blue.png"/>
+ </tile>
+ <tile id="18">
+  <properties>
+   <property name="color" value="purple"/>
+   <property name="object" value="color actuator"/>
+  </properties>
+  <image width="18" height="18" source="color_actuator_purple.png"/>
  </tile>
 </tileset>

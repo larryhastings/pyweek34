@@ -221,6 +221,35 @@ class Checkpoint(Block):
                 level.toggle_color(color)
 
 
+class DeparturePoint(Block):
+    solid = False
+    activated = False
+
+    activated_image = "pixel_platformer/tiles/tile_0148"
+
+    def __init__(self, image, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        self.sprite = scene.layers[gray_layer].add_sprite(image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+
+        level.collision_grid.add(self)
+        level.level_complete_callbacks.append(self.on_level_complete)
+
+
+    def on_touched(self):
+        if self.activated:
+            print("LEVEL COMPLETE")
+            pass
+
+    def on_level_complete(self):
+        # print("departure point is prepped and ready!")
+        self.activated = True
+        self.sprite.image = self.activated_image
+
+
 class Collectable(Block):
     nursery: w2d.Nursery
     solid = False
@@ -233,16 +262,10 @@ class Collectable(Block):
 
         self.image = image
         self.pos = position
-        self.collected = False
 
         level.collision_grid.add(self)
 
-    def __repr__(self):
-        current = "collected" if self.collected == self else "uncollected"
-        return f"<Collectable {self.__repr_pos__()} {current}>"
-
     def on_touched(self):
-        self.collected = True
         self.nursery.cancel()
 
     async def run(self):
@@ -261,12 +284,8 @@ class Collectable(Block):
             pos=self.pos * TILE_SIZE,
         )
         with sprite:
-            level.collectables += 1
-            try:
-                async with w2d.Nursery() as self.nursery:
-                    self.nursery.do(floating_wobble(sprite))
-            finally:
-                level.collectables -= 1
+            async with w2d.Nursery() as self.nursery:
+                self.nursery.do(floating_wobble(sprite))
 
             await w2d.animate(
                 sprite,
@@ -288,6 +307,39 @@ async def floating_wobble(
 
     async for t in game_clock.coro.frames():
         sprite.pos = starting_pos + wobble_range * math.sin(speed * t + phase)
+
+
+
+class Gem(Collectable):
+
+    def __init__(self, image: str, x, y=None):
+        super().__init__(image, x, y)
+        self.collected = False
+        level.gems += 1
+
+    def __repr__(self):
+        current = "collected" if self.collected == self else "uncollected"
+        return f"<Collectable {self.__repr_pos__()} {current}>"
+
+    def on_touched(self):
+        if not self.collected:
+            super().on_touched()
+            level.gems -= 1
+            level.on_level_completion_changed()
+            self.collected = True
+
+
+class ColorActuator(Collectable):
+
+    def __init__(self, color, image: str, x, y=None):
+        super().__init__(image, x, y)
+        self.color = color
+        assert color in color_to_layer
+
+    def on_touched(self):
+        super().on_touched()
+        level.have_color_actuator[self.color] = True
+
 
 
 class Switch(Block):
@@ -368,8 +420,11 @@ class Level:
         self.color_state = {color: True for color in colors}
         self.color_to_blocks = {color: [] for color in colors}
         self.color_to_switches = {color: [] for color in colors}
+        self.have_color_actuator = {color: False for color in colors}
 
-        self.collectables = 0
+        self.level_complete_callbacks = []
+
+        self.gems = 0
 
         self.current_checkpoint = None
         self.physical_objects = {}
@@ -377,10 +432,21 @@ class Level:
     async def run(self):
         global player
         objects = self.load_map("test")
+        # print(f"level has {self.gems} gems to collect.")
         async with w2d.Nursery() as self.nursery:
             for obj in objects:
                 self.nursery.do(obj.run())
             self.nursery.do(run_lives())
+
+    def on_level_completion_changed(self):
+        # print(f"level now has {self.gems} gems to collect.")
+        if self.gems == 0:
+            # print("level complete!")
+            self.level_complete()
+
+    def level_complete(self):
+        for callback in self.level_complete_callbacks:
+            callback()
 
     def toggle_color(self, color):
         assert color != "gray"
@@ -497,11 +563,15 @@ class Level:
                             self.current_checkpoint = block
                             block.save()
                     elif object_type == "gem":
-                        block = Collectable(image, x, y)
+                        block = Gem(image, x, y)
+                    elif object_type == "color actuator":
+                        block = ColorActuator(color, image, x, y)
                     elif object_type == "switch":
                         block = Switch(color, x, y)
                     elif object_type == "jump restore":
                         block = JumpRestore(image, x, y)
+                    elif object_type == "departure point":
+                        block = DeparturePoint(image, x, y)
                     else:
                         block = ColoredBlock(color, image, x, y)
                     if hasattr(block, 'run'):
@@ -642,6 +712,8 @@ class Player:
         async for ev in w2d.events.subscribe(pygame.KEYDOWN, pygame.KEYUP):
             key = w2d.constants.keys(ev.key)
             if not (color := key_to_action.get(key)):
+                continue
+            if not level.have_color_actuator[color]:
                 continue
             if ev.type == pygame.KEYDOWN:
                 level.toggle_color(color)

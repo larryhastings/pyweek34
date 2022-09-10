@@ -460,6 +460,9 @@
   <image width="18" height="18" source="tiles/tile_0148.png"/>
  </tile>
  <tile id="161">
+  <properties>
+   <property name="object" value="departure point"/>
+  </properties>
   <image width="18" height="18" source="tiles/tile_0149.png"/>
  </tile>
  <tile id="162">
