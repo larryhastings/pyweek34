@@ -660,7 +660,10 @@ class Level:
         elif self._monsters:
             return f"{self._monsters} monsters remaining"
         else:
-            return "All clear"
+            if self.gems:
+                return "No monsters remaining"
+            else:
+                return "All clear!"
     monsters = HUDBound(2, MONSTER_TEMPLATE)
     total_monsters = HUDBound(2, MONSTER_TEMPLATE)
 
@@ -1039,6 +1042,7 @@ class Player:
         scene.camera.pos = self.shape.pos
 
         self.controller = controller
+        self.state = self.state_falling
         self.jumps_remaining = 2
         self.jump_requested = False
         # this is the vertical impulse value, e.g. self.JUMP
@@ -1160,7 +1164,7 @@ class Player:
 
     MAX_HORIZONTAL_SPEED = 0.4
 
-    GROUND_FRICTION_FACTOR = 0.80 # delta.x multiplied by this every tick
+    GROUND_FRICTION_FACTOR = 0.70 # delta.x multiplied by this every tick
 
     WALL_FRICTION_MAX_SPEED = TERMINAL_VELOCITY / 5
 
@@ -1208,7 +1212,7 @@ class Player:
         falling_gravity = self.FALLING_GRAVITY * dt
 
         self.state = self.state_on_ground
-        assert self.jumps_remaining == 2
+        # assert self.jumps_remaining == 2
 
         jumped = False
         jump_buffered_until = -1
