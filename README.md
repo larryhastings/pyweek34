@@ -1,6 +1,28 @@
+Dr. Farb's Huepocalypse
+=======================
+
+Overview
+--------
+
+Dr. Hugh Farb, you've really done it this time!
+
+Your wavelength dimensional convolver has overloaded...
+breaking *color itself!*  All the color is starting to
+drain out of the world, starting with the lower frequencies.
+I never thought I'd have a use for this word, but it's...
+a ***huepocalypse!***
+
+If you don't fix it soon, the entire planet is going to
+turn red!  We think all color might drain out of the entire
+solar system--but that's not such a big concern, as we'd
+certainly all be dead by then.
+
+You're going to have to put on that silly white color
+stabilization suit and run out and fix it!  Good thing
+you're such a gym rat--all that cardio and parkour is
+going to come in handy!
 
 
-It's time to play GAME NAME HERE!
 
 How To Install And Run
 ----------------------
@@ -58,21 +80,25 @@ Platform mechanics
 
 Movement features of your character:
 
-* Double jump!
+* Run!  In two deluxe directions--left *and* right!
 
-* Wall slide and wall jump!  Jumping from a wall slide restores your jump.
+* Not merely a single jump, not for you!  You get a *double* jump!
 
-* "Coyote time"!  If you jump immediately after falling off a ledge, or pushing
-  away from a wall, you'll be rewarded with getting your double jump back.
+* *Wall slide* and *wall jump!*  Jumping from a wall slide restores your
+  second jump.
 
-* "Coyote time warp speed"!  If you're holding left or right when you execute
-  a jump during "coyote time", you'll immediately warp to full speed in that
-  direction!
+* *Coyote time!*  If you jump immediately after falling
+  off a ledge, or pushing away from a wall, you'll be rewarded with
+  getting your double jump back.  But be quick--it's a very short winow!
+
+* And new for 2022: *coyote time warp speed!*  If you're holding
+  left or right when you execute a jump during "coyote time", you'll
+  immediately warp to full speed in that direction!
 
 Color
 -----
 
-Color plays a big role in GAME NAME HERE.  There are six colors:
+Color plays a big role in the huepocalypse.  There are six colors:
 
 * red
 * orange
@@ -98,7 +124,7 @@ related *primary* colors:
 
 When you turn off orange, you turn off red, orange, and yellow!
 And when you turn orange back on, you turn red, orange, and yellow
-all back on!
+all back on at once!
 
 (But it doesn't go the other way--toggling red doesn't affect
 orange or purple.)
@@ -107,40 +133,78 @@ orange or purple.)
 Terrain
 -------
 
-You'll see the following things in levels:
+You'll see the following sorts of objects and terrain in levels:
 
-* Color switches!  These turn a color on or off.  You can toggle
+* *Platforms!*  They're all over the place.  Not sure how they stay
+  up like that.
+
+* *Pass-through platforms!*  These platforms are thinner than normal.
+  You can jump up through them from below!  Maybe it's old fashioned--
+  I think this was first popularized nearly forty years ago--but
+  sometimes the old ways are the best ways.
+
+* *Color switches!*  These turn a color on or off.  You can toggle
   a color's state by touching--or shooting--one of its switches.
 
-* Colored platforms!  These are platforms that disappear when
+* *Colored platforms!*  These are platforms that disappear when
   you turn a color off--and reappear when you turn the color back
   on again.
 
-* A shiny new Whitegun!  This is a gun that shoots the color white.
-  Use it to whitewash Monsters out of existence.  You can also shoot
-  color switches!
+* *Checkpoints!*  These little mushroom guys save your current
+  your current location.  If you die--egad!--you'll reappear at
+  a checkpoint.  Checkpoints look like mushrooms--I'm not sure
+  why, that's how they came from the cfactory.  The shiny red
+  pressed-in red one is your current checkpoint, and all the
+  other ones are more brown and tall and skinny.  Checkpoints
+  also remember the current state of all the color switches,
+  so be sure to touch one pretty often!
 
-* Color actuators!  These are colored tubes that give you the ability
-  to toggle a color whenever you want!  Only lasts through the end
-  of the level.
-
-* Checkpoints!  These little mushroom guys save your current state:
-  your current location and the current on/off state of all the colors.
-  The popped-up one is your current checkpoint.
-
-* Jump restorers!  Touch one of these green diamonds while in the air,
+* *Jump restorers!*  Touch one of these green diamonds while in the air,
   and you'll get *both* your jumps back!  Did someone say octuple-jump?
   I swear I heard someone say octuple-jump.
 
-* Pass-through platforms!  These platforms are thinner
+* *Springboards!*  Just touch one of these, and you'll go shooting
+  up into the air like a firework!  Luckily for you, you don't also
+  do the explody bit at the end.  Or, at least, I don't think so.
+
+* *Signposts!*  Just walk by one of these signs to read it.
+  It won't even slow you down!  But maybe you should read it
+  anyway, it might have something interesting to say.
+
+And there are even sometims things for you to pick up, like:
+
+* *Gems!*  These floaty blue things have something to do with fixing
+  the color problem.  I'm really not sure--all I know is, you have
+  to pick up all of them before you can leave the level.  Just
+  run up and touch one to collect it!  You might need to jump a little.
+
+* *Color actuators!*  These are colored tubes that give you the ability
+  to toggle a color whenever you want!  Only lasts through the end
+  of the level.
+
+* A shiny new *Whitegun!*  This is a gun that shoots the color white.
+  Use it to whitewash Monsters out of existence.  You can also shoot
+  color switches!  Pity you can't take it with you when you exit a
+  level.
+
 
 But it's not all good news.  You'll also see:
 
-* Monsters!  You have to kill all of them--and the only way is
-  by shooting them. But be careful, if you touch one it'll kill you!
+* *Monsters!*  You have to kill all of them before you can leave--and
+  the only way is by shooting them. But be careful, if you touch one
+  it'll kill you!
 
-* Spikes!  If you fall on them you die!  Well, there's one exception:
+* *Spikes!*  If you fall on them you die!  Well, there's one exception:
   if you jump up through spikes from below, you'll pass through them safely!
+
+Oh, I almost forgot!  And we've saved the best for last.  One last bit
+of terrain:
+
+* Every level has one gen-u-ine patented *departure point!*
+  Once you've killed all the monsters and picked up all the gems,
+  the departure point will become active!  Just touch it to be
+  whisked away, off to your next adventure.
+
 
 
 Controls
