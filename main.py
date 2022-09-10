@@ -1955,5 +1955,14 @@ async def main(args=None):
         await level_progression(level_name)
         ns.cancel()
 
+    print()
+    print("You won!")
+    print()
+    print("Thanks for playing Dr. Farb's Huepocalypse.")
+    print()
+    print("      Larry and Dan")
+    print("      2022/09/11 0:59am")
+
+
 
 w2d.run(main())
