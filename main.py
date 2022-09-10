@@ -130,7 +130,6 @@ class ColoredBlock(Block):
         assert color in color_tile_maps, f"{color=} not in {color_tile_maps=}"
         self.color = color
 
-        # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
         if image is not None:
             tile_map = color_tile_maps[color]
             tile_map[x, y] = image
@@ -148,7 +147,6 @@ class ColoredBlock(Block):
 
 class Death(Block):
     solid = True
-    color = 'gray'
 
     def __init__(self, x, y=None):
         if (y is None) and isinstance(x, vec2):
@@ -158,11 +156,33 @@ class Death(Block):
         self.pos = position
         level.collision_grid.add(self)
 
-    def __repr__(self):
-        return f"<Death {self.__repr_pos__()}>"
-
     def on_touched(self):
         player.nursery.cancel()
+
+
+class Monster(Block):
+    def __init__(self, image, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        level.collision_grid.add(self)
+        self.sprite = scene.layers[gray_layer].add_sprite(image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+
+        level.monsters += 1
+        self.dead = False
+
+    def on_shot(self):
+        if not self.dead:
+            self.sprite.delete()
+            level.collision_grid.remove(self)
+            level.monsters -= 1
+            level.on_level_completion_changed()
+
+    def on_touched(self):
+        if not self.dead:
+            player.nursery.cancel()
 
 
 class Checkpoint(Block):
@@ -425,6 +445,7 @@ class Level:
         self.level_complete_callbacks = []
 
         self.gems = 0
+        self.monsters = 0
 
         self.current_checkpoint = None
         self.physical_objects = {}
@@ -432,6 +453,8 @@ class Level:
     async def run(self):
         global player
         objects = self.load_map("test")
+        self.total_gems = self.gems
+        self.total_monsters = self.monsters
         # print(f"level has {self.gems} gems to collect.")
         async with w2d.Nursery() as self.nursery:
             for obj in objects:
@@ -440,7 +463,7 @@ class Level:
 
     def on_level_completion_changed(self):
         # print(f"level now has {self.gems} gems to collect.")
-        if self.gems == 0:
+        if self.gems == self.monsters == 0:
             # print("level complete!")
             self.level_complete()
 
@@ -572,6 +595,8 @@ class Level:
                         block = JumpRestore(image, x, y)
                     elif object_type == "departure point":
                         block = DeparturePoint(image, x, y)
+                    elif object_type == "monster":
+                        block = Monster(image, x, y)
                     else:
                         block = ColoredBlock(color, image, x, y)
                     if hasattr(block, 'run'):
@@ -639,11 +664,17 @@ async def shoot(player: 'Player', direction: vec2):
             new_touching = set()
             for t, loc, hits in collisions:
                 for obj in hits:
+                    if isinstance(obj, Monster):
+                        obj.on_shot()
+                        ns.cancel()
+                        continue
+
                     match obj:
                         case Switch():
                             if obj not in touching:
                                 obj.on_touched()
                             new_touching.add(obj)
+                            ns.cancel()
 
                         case Block(solid=True):
                             ns.cancel()

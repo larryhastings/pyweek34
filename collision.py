@@ -90,6 +90,7 @@ class GridCollider(Generic[T]):
     def add(self, tile: T) -> None:
         if tile in self.tiles_seen:
             raise ValueError(f"tile {tile} already in grid")
+        self.tiles_seen.add(tile)
         pos = vec2(tile.pos)
         if (pos.x > self.size.x) or (pos.y > self.size.y):
             raise ValueError(f"tile {tile} is outside the grid, grid is size ({self.size.x}, {self.size.y})")

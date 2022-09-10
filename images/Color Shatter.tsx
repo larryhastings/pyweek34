@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="19" columns="0">
+<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="20" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
+ <properties>
+  <property name="object" value="monster"/>
+ </properties>
  <tile id="0">
   <properties>
    <property name="color" value="red"/>
@@ -144,5 +147,11 @@
    <property name="object" value="color actuator"/>
   </properties>
   <image width="18" height="18" source="color_actuator_purple.png"/>
+ </tile>
+ <tile id="19">
+  <properties>
+   <property name="object" value="monster"/>
+  </properties>
+  <image width="18" height="18" source="monster.png"/>
  </tile>
 </tileset>
