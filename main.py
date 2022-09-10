@@ -75,7 +75,7 @@ scene.chain = [
     w2d.chain.Light(
         light=w2d.chain.Layers([LIGHT_LAYER]),
         diffuse=w2d.chain.LayerRange(stop=LIGHT_LAYER - 1),
-        ambient=(1.0, 1.0, 1.0, 1.0),
+        ambient=(0.7, 0.7, 0.7, 1.0),
     ),
     w2d.chain.LayerRange(start=LIGHT_LAYER + 1)
 ]
