@@ -88,6 +88,7 @@ for color, layer in color_to_layer.items():
         color_off_tile_maps[color] = scene.layers[layer + 1].add_tile_map()
         scene.layers[layer + 1].visible = False
 
+SEMISOLID = "semisolid"
 
 class Block:
     def __init__(self, image, x, y=None):
@@ -581,11 +582,6 @@ class Player:
         self.v = vec2(0, 0)
         self.facing = 1
         self.shape = scene.layers[player_layer].add_sprite("pixel_platformer/tiles/tile_0145", pos=pos * TILE_SIZE, anchor_x=0, anchor_y=0)
-        # self.shape = scene.layers[player_layer].add_star(
-        #     pos=pos * TILE_SIZE,
-        #     points=6,
-        #     outer_radius=cell_size / 2, inner_radius=cell_size / 4, fill=True, color=(0.5, 0.5, 0.5)
-        # )
 
         scene.camera.pos = self.shape.pos
 
@@ -614,12 +610,26 @@ class Player:
         with self.shape:
             async with w2d.Nursery() as ns:
                 self.nursery = ns
+                ## scan inputs
+                ##
+                ## HI THERE DAN
+                ## WE SCAN INPUTS *FIRST*
+                ## THIS HELPS WITH DETECTING THAT WE
+                ## CHANGED COLOR STATE BEFORE RUNNING PHYSICS
+                ## PLEASE LEAVE IT IN THIS ORDER
+                ##
+                ns.do(self.handle_keys())
+
+                ## react to inputs
                 ns.do(self.accel())
                 ns.do(self.jump())
                 ns.do(self.shoot())
+
+                ## compute new game state
                 ns.do(self.run_physics())
+
+                ## render
                 ns.do(self.camera_tracking())
-                ns.do(self.handle_keys())
 
     async def shoot(self):
         while True:
@@ -733,9 +743,9 @@ class Player:
 
         # HACK FOR DEBUG
         if 0:
-            self.pos = vec2(+0.34889, +20.53333)
-            self.v = vec2(-0.35374, -0.20667)
-            self.state = self.state_rising
+            self.pos = vec2(+49.39862, +25.90000)
+            self.v = vec2(+0.00000, +0.25667)
+            self.state = self.state_falling
 
             hang_time_timer = self.HANG_TIME_TICKS
             self.jump_start_pos = self.pos
@@ -746,11 +756,22 @@ class Player:
             new_touching = set()
             print(f"[{tick:05} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
 
-            if 1:
+            if 0:
                 # this is just a sanity check, it's not needed for the game to work.
                 hits = level.collision_grid.collide_pawn(self)
                 if hits:
-                    solid_hits = [tile for tile in hits if tile.solid and level.color_state[tile.color]]
+                    solid_hits = []
+                    for tile in hits:
+                        if tile.solid:
+                            if isinstance(tile, ColoredBlock):
+                                # if level.color_state[tile.color]:
+                                #     solid_hits.append(tile)
+
+                                # we can no longer detect collision bugs
+                                # with colored tiles.
+                                pass
+                            else:
+                                solid_hits.append(tile)
                     if solid_hits:
                         print = builtins.print
                         print(f"shouldn't be touching anything solid right now!")
@@ -858,11 +879,19 @@ class Player:
                         l.append(tile)
 
                     if not solid_tiles:
-                        print(f"  collision with only passthrough tiles at {t=}")
-                        passthrough_tiles = set(passthrough_tiles)
-                        for tile in passthrough_tiles - touching:
-                            tile.on_touched()
-                        new_touching.update(passthrough_tiles)
+                        if not passthrough_tiles:
+                            print(f"  no collisions?!")
+                            pass
+                        else:
+                            print(f"  collision with only passthrough tiles at {t=}")
+                            if print == builtins.print:
+                                for tile in passthrough_tiles:
+                                    print(f"    {tile}")
+                            passthrough_tiles = set(passthrough_tiles)
+                            for tile in passthrough_tiles - touching:
+                                print(f"    {tile}")
+                                tile.on_touched()
+                            new_touching.update(passthrough_tiles)
                         continue
 
                     found_a_solid_collision = True
@@ -929,6 +958,22 @@ class Player:
                     for tile in solid_tiles:
                         tile.on_touched()
 
+                        # Special case!
+                        #
+                        # IF it's a colored tile,
+                        # AND the color is on (which it has to be for us to see it here)
+                        # AND t=0
+                        # THEN the color got toggled on while we were
+                        #    either because the player turned on the color (in handle_keys during the current game_clock callback but we can't communicate that to run_physics)
+                        #    or because a bullet hit the switch (in bullet.animate at some unknown time but probably at the end of the last game_clock tick, after run_physics ran in that logic)
+                        # Or maybe there's a bug in the collision code!  But we can no longer detect that, so let's pretend that never happens.
+                        #
+                        # Since this state is obviously caused by player action and could never be a bug,
+                        # we kill the player.
+                        if isinstance(tile, ColoredBlock) and (t == 0):
+                            self.nursery.cancel()
+                            return
+
                         # these are all calculated based on the just-before-collision position.
                         tile_overlaps_in_x = pawn_overlaps_tile_in_x(tile)
                         tile_overlaps_in_y = pawn_overlaps_tile_in_y(tile)
@@ -936,13 +981,13 @@ class Player:
 
                         if tile_overlaps_in_x:
                             hit_y = True
-                            assert not tile_overlaps_in_y
+                            assert (not tile_overlaps_in_y) or (t==0)
                         elif tile_overlaps_in_y:
                             hit_x = True
-                            assert not tile_overlaps_in_x
+                            assert (not tile_overlaps_in_x) or (t==0)
                         else:
                             # neither
-                            assert not (tile_overlaps_in_x or tile_overlaps_in_y)
+                            assert (not (tile_overlaps_in_x or tile_overlaps_in_y)) or (t==0)
                             hit_corner = True
 
                     if hit_x:
