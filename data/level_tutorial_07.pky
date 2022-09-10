@@ -1,5 +1,5 @@
 name = Tutorial 7: The Color Actuator
-next level = you_win
+next level = jump_lots
 messages = {
         1 = """
             A color actuator!  These are really handy!

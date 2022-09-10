@@ -1909,7 +1909,10 @@ async def main(args=None):
     level_name = START_LEVEL
 
     if len(args):
-        level_name = args[0]
+        if args[0] in ("-c", "--challenge"):
+            level_name = "jump_lots"
+        else:
+            level_name = args[0]
 
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
