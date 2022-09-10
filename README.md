@@ -23,6 +23,10 @@ you're such a gym rat--all that cardio and parkour is
 going to come in handy!
 
 
+*Dr. Farb's Huepocalypse* was written by Larry Hastings
+and Dan Pope in September 2022 for the
+[PyWeek 34](https://pyweek.org/34/) game programming contest.
+
 
 How To Install And Run
 ----------------------
@@ -126,8 +130,13 @@ When you turn off orange, you turn off red, orange, and yellow!
 And when you turn orange back on, you turn red, orange, and yellow
 all back on at once!
 
-(But it doesn't go the other way--toggling red doesn't affect
+(Though it doesn't go the other way--toggling red doesn't affect
 orange or purple.)
+
+Oh, I almost forgot!  There's one more wrinkle.  The blue and
+purple colors are even more unstable than the rest.  I'm afraid
+that you can only turn them off for short bursts.  Then they
+pop back on all by themselves!
 
 
 Terrain
