@@ -894,7 +894,7 @@ async def shoot(player: 'Player', direction: vec2):
                         if obj not in touching:
                             obj.on_touched(None, None)
                         new_touching.add(obj)
-                        ns.cancel()
+                        # ns.cancel()
                     elif isinstance(obj, Block) and obj.solid:
                         ns.cancel()
 
