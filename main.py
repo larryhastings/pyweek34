@@ -1825,15 +1825,43 @@ async def drive_main_clock():
 
 
 async def pauser():
-   while True:
+    while True:
         await w2d.next_event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
-        paused = game_clock.paused = not game_clock.paused
-        if paused:
-            for layer in layers:
-                scene.layers[layer].set_effect('blur')
-        else:
-            for layer in layers:
-                scene.layers[layer].clear_effect()
+        game_clock.paused = True
+        for layer in layers:
+            scene.layers[layer].set_effect('blur')
+
+        scene.layers[hud_layer + 1].parallax = 0
+        with scene.layers[hud_layer + 1].add_label(
+            "Paused",
+            align="center",
+        ):
+            await w2d.next_event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+
+        game_clock.paused = False
+        for layer in layers:
+            scene.layers[layer].clear_effect()
+
+
+async def title_screen():
+    layer = scene.layers[hud_layer + 1]
+    layer.parallax = 0
+
+
+    with layer.add_sprite('logo', pos=(0, -50)), layer.add_label(
+        "Press space to begin",
+        align="center",
+        pos=(0, 100),
+    ) as text:
+        async with w2d.Nursery() as ns:
+            ns.do(floating_wobble(text))
+            bg = scene.background
+            scene.background = '#56a9c4'
+            try:
+                await w2d.next_event(pygame.KEYDOWN, key=pygame.K_SPACE)
+            finally:
+                scene.background = bg
+            ns.cancel()
 
 
 START_LEVEL = 'tutorial_01'
@@ -1862,6 +1890,7 @@ async def main(args=None):
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
         ns.do(pauser())
+        await title_screen()
         await level_progression(level_name)
         ns.cancel()
 
