@@ -71,6 +71,16 @@ color_to_related_colors = {
     'gray': ['gray'],
 }
 
+colors_affected_by_toggle = {
+    'red': ['red'],
+    'orange': ['red', 'orange', 'yellow',],
+    'yellow': ['yellow'],
+    'green': ['yellow', 'green', 'blue',],
+    'blue': ['blue'],
+    'purple': ['blue', 'purple', 'red',],
+    'gray': ['gray'],
+}
+
 
 scene_width = 900
 scene_height = 540
@@ -595,11 +605,10 @@ class Level:
 
     def toggle_color(self, color):
         assert color != "gray"
-        new_state = not self.color_state[color]
-        all_colors = color_to_related_colors[color].copy()
-        all_colors.append(color)
 
-        for color in color_to_related_colors[color]:
+        new_state = not self.color_state[color]
+
+        for color in colors_affected_by_toggle[color]:
             old_state = self.color_state[color]
             if old_state != new_state:
                 self.color_state[color] = new_state
