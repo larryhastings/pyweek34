@@ -5,16 +5,39 @@ It's time to play GAME NAME HERE!
 Install
 -------
 
-Create a virtual env in the game directory:
+You need to run the game from your favorite command shell, using a Python "virtual env" or "venv".  First, create a venv in the game directory:
 
     % python3 -m venv .venv
+
+Now activate it.  On Windows and most UNIX shells, the command to activate a venv is:
+
+    % ./.venv/bin/activate
+
+If that doesn't work, try this command:
+
     % source .venv/bin/activate
 
-and install the dependencies:
+Next you'll need to pull in the source for `wasabi2d`.
+We're using a published but unreleased-as-a-package version of wasabi2d, revision 6e855f65f9b4326e8ec6647caf7d4990c43a618e.
+
+    % git submodule init vendor/wasabi2d
+    % git submodule update
+
+Now you can install the game's dependencies:
 
     % pip3 install -e requirements.txt
 
-We're using a published but unreleased-as-a-package version of wasabi2d, revision 6e855f65f9b4326e8ec6647caf7d4990c43a618e.  (It'll get installed from requirements.txt.)
+This will install the vendored copy of wasabi2d too.  Now the game should be ready to run:
+
+   % python3 main.py
+
+Phew!
+
+If you exit this venv, or attempt to run the game from a different shell,
+you'll need to "activate" the venv again in that instance of the shell.
+If you forget to activate, the game will complain with a
+
+    ModuleNotFoundError: No module named 'wasabigeom'
 
 
 Goal
