@@ -329,9 +329,17 @@
   <image width="18" height="18" source="tiles/tile_0106.png"/>
  </tile>
  <tile id="119">
+  <properties>
+   <property name="object" value="springboard"/>
+   <property name="state" value="low"/>
+  </properties>
   <image width="18" height="18" source="tiles/tile_0107.png"/>
  </tile>
  <tile id="120">
+  <properties>
+   <property name="object" value="springboard"/>
+   <property name="state" value="high"/>
+  </properties>
   <image width="18" height="18" source="tiles/tile_0108.png"/>
  </tile>
  <tile id="121">

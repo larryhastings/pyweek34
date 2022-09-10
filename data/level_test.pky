@@ -1,0 +1,8 @@
+messages = {
+        1 = """
+            Hello, and welcome to the experiment!
+            """
+        2 = """
+            Oh dear.  Those are spikes!  Don't step on them!
+            """
+}

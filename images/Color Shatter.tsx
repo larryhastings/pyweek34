@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="23" columns="0">
+<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="34" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <properties>
   <property name="object" value="monster"/>
@@ -171,5 +171,81 @@
    <property name="object" value="jump through"/>
   </properties>
   <image width="18" height="18" source="jump_through_right.png"/>
+ </tile>
+ <tile id="23">
+  <properties>
+   <property name="message id" value="1"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="24">
+  <properties>
+   <property name="message id" value="2"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="25">
+  <properties>
+   <property name="message id" value="3"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="26">
+  <properties>
+   <property name="message id" value="4"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="27">
+  <properties>
+   <property name="message id" value="5"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="28">
+  <properties>
+   <property name="message id" value="6"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="29">
+  <properties>
+   <property name="message id" value="7"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="30">
+  <properties>
+   <property name="message id" value="8"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="31">
+  <properties>
+   <property name="message id" value="9"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="32">
+  <properties>
+   <property name="message id" value="10"/>
+   <property name="object" value="signpost"/>
+  </properties>
+  <image width="18" height="18" source="signpost.png"/>
+ </tile>
+ <tile id="33">
+  <properties>
+   <property name="object" value="gun"/>
+  </properties>
+  <image width="18" height="18" source="whitegun.png"/>
  </tile>
 </tileset>

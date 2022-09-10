@@ -1,17 +1,20 @@
+#!/usr/bin/env python3
+
 from abc import abstractmethod
 import bisect
 import builtins
+import collision
 import math
 from pathlib import Path
-import collision
+import perky
 from pytiled_parser import parse_map
 import random
 import sys
 import time
 from typing import Optional
-import wasabi2d.loop
-from wasabi2d.clock import Clock
 import wasabi2d as w2d
+from wasabi2d.clock import Clock
+import wasabi2d.loop
 import wasabigeom
 from wasabigeom import vec2
 
@@ -33,8 +36,8 @@ gamedir_path = Path(sys.argv[0]).resolve().parent
 
 colors = {'red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'}
 
-layers = list(range(17))
-background_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, sprite_layer, player_layer, hud_layer, = layers
+layers = list(range(18))
+background_layer, red_layer, red_off_layer, orange_layer, orange_off_layer, yellow_layer, orange_off_layer, green_layer, green_off_layer, blue_layer, blue_off_layer, purple_layer, purple_off_layer, gray_layer, sprite_layer, player_layer, light_layer, hud_layer, = layers
 
 color_to_layer = {
     'red': red_layer,
@@ -68,17 +71,16 @@ scene = w2d.Scene(
 )
 scene.background = (0.9, 0.9, 0.9)
 
-LIGHT_LAYER = 1000
-lights = scene.layers[LIGHT_LAYER]
-hud = scene.layers[LIGHT_LAYER + 1]
+lights = scene.layers[light_layer]
+hud = scene.layers[hud_layer]
 hud.parallax = 0.0
 scene.chain = [
     w2d.chain.Light(
-        light=w2d.chain.Layers([LIGHT_LAYER]),
-        diffuse=w2d.chain.LayerRange(stop=LIGHT_LAYER - 1),
+        light=w2d.chain.Layers([light_layer]),
+        diffuse=w2d.chain.LayerRange(stop=light_layer - 1),
         ambient=(0.7, 0.7, 0.7, 1.0),
     ),
-    w2d.chain.LayerRange(start=LIGHT_LAYER + 1)
+    w2d.chain.LayerRange(start=hud_layer)
 ]
 
 color_tile_maps = {}
@@ -117,6 +119,9 @@ class Block:
         return f"<{self.__class__.__name__} {self.__repr_pos__()}>"
 
     def on_touched(self, player, delta):
+        pass
+
+    def on_touch_finished(self):
         pass
 
 class ColoredBlock(Block):
@@ -390,6 +395,14 @@ class ColorActuator(Collectable):
 
 
 
+class Gun(Collectable):
+
+    def on_touched(self, player, delta):
+        super().on_touched(player, delta)
+        level.have_gun = True
+
+
+
 class Switch(Block):
     solid = False
 
@@ -439,11 +452,75 @@ class Switch(Block):
             light.alpha = 0.6
 
 
+class Springboard(Block):
+    solid = False
+    state = "low"
+
+    low_image = "pixel_platformer/tiles/tile_0107"
+    high_image = "pixel_platformer/tiles/tile_0108"
+
+    def __init__(self, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        # grid[int(position.x)][int(position.y)].append(self)
+        # tile_map = gray_tile_map
+        # tile_map[x, y] = image
+
+        level.collision_grid.add(self)
+
+        self.sprite = scene.layers[gray_layer].add_sprite(self.low_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+
+    def on_touched(self, player, delta):
+        if self.state == "low":
+            self.sprite.image = self.high_image
+            player.jump_forced = player.JUMP * 2
+
+    def on_touch_finished(self):
+        self.state = "low"
+        self.sprite.image = self.low_image
+
+
 class JumpRestore(Block):
     solid = False
     def on_touched(self, player, delta):
         assert player
         player.jumps_remaining = 2
+
+
+class Signpost(Block):
+    solid = False
+
+    def __init__(self, message, image, x, y):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        self.message = message
+        self.sprite = scene.layers[gray_layer].add_sprite(image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+
+        level.collision_grid.add(self)
+        self.label = None
+
+    def on_touched(self, player, delta):
+        if not self.label:
+            self.label = scene.layers[hud_layer].add_label(
+                text=self.message,
+                font="checkbk0",
+                color="yellow",
+                fontsize=36,
+                align="left",
+                # pos=(20, 80),
+                pos=((-scene_height / 2) - 160, (-scene_height / 2) + 70),  # in screen coords
+                )
+
+    def on_touch_finished(self):
+        self.label.delete()
+        self.label = None
+
 
 
 def background_block(image, x, y=None):
@@ -464,11 +541,14 @@ game_clock = main_clock.create_sub_clock()
 
 
 class Level:
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         self.color_state = {color: True for color in colors}
         self.color_to_blocks = {color: [] for color in colors}
         self.color_to_switches = {color: [] for color in colors}
+
         self.have_color_actuator = {color: False for color in colors}
+        self.have_gun = False
 
         self.level_complete_callbacks = []
 
@@ -480,7 +560,7 @@ class Level:
 
     async def run(self):
         global player
-        objects = self.load_map("test")
+        objects = self.load_map(self.name)
         self.total_gems = self.gems
         self.total_monsters = self.monsters
         # print(f"level has {self.gems} gems to collect.")
@@ -513,8 +593,12 @@ class Level:
         return new_state
 
     def load_map(self, name):
-        filename = f"level_{name}.tmx"
-        level_map = parse_map(gamedir_path.joinpath("data", filename))
+        data_path = gamedir_path.joinpath("data")
+
+        level_map = parse_map(data_path.joinpath(f"level_{name}.tmx"))
+        level_metadata = perky.load(data_path.joinpath(f"level_{name}.pky"))
+
+        messages = level_metadata.get("messages", {})
 
         self.map_size = vec2(level_map.map_size)
         self.map_size_in_screen = self.map_size * TILE_SIZE
@@ -605,6 +689,7 @@ class Level:
                     properties = tile.properties or empty_dict
                     object_type = properties.get("object", None)
                     color = properties.get("color", "gray")
+                    message_id = properties.get("message id", "-1")
 
                     if object_type == "checkpoint":
                         checkpoint = tile.properties.get("checkpoint", None)
@@ -617,6 +702,10 @@ class Level:
                         block = Gem(image, x, y)
                     elif object_type == "color actuator":
                         block = ColorActuator(color, image, x, y)
+                    elif object_type == "gun":
+                        block = Gun(image, x, y)
+                    elif object_type == "springboard":
+                        block = Springboard(x, y)
                     elif object_type == "switch":
                         block = Switch(color, x, y)
                     elif object_type == "jump through":
@@ -629,6 +718,9 @@ class Level:
                         block = DeparturePoint(image, x, y)
                     elif object_type == "monster":
                         block = Monster(image, x, y)
+                    elif object_type == "signpost":
+                        message = messages.get(message_id, "This space left intentionally blank.")
+                        block = Signpost(message, image, x, y)
                     else:
                         block = ColoredBlock(color, image, x, y)
                     if hasattr(block, 'run'):
@@ -760,6 +852,8 @@ class Player:
         self.controller = controller
         self.jumps_remaining = 2
         self.jump_requested = False
+        # this is the vertical impulse value, e.g. self.JUMP
+        self.jump_forced = 0
 
     async def handle_keys(self):
         key_to_action = {
@@ -808,7 +902,8 @@ class Player:
     async def shoot(self):
         while True:
             await self.controller.shoot()
-            level.nursery.do(shoot(self, vec2(self.facing, 0)))
+            if level.have_gun:
+                level.nursery.do(shoot(self, vec2(self.facing, 0)))
             await game_clock.coro.sleep(0.15)
 
     async def accel(self):
@@ -975,6 +1070,20 @@ class Player:
             else:
                 gravity = falling_gravity
 
+            # if something external is making us jump
+            # (e.g. a springboard)
+            # reset delta.y, but also give back both jumps.
+            # this makes springboards consistent.
+            # (if we didn't do it this way, we might have
+            # a frame-perfect trick where you jump on the same?
+            # consecutive? frame as you touch the springboard
+            # and get an extra jump for free.)
+            if self.jump_forced:
+                delta = vec2(delta.x, 0)
+                self.jumps_remaining = 2
+                self.jump_requested = False
+                coyote_time_until = -1
+
             if self.jump_requested:
                 self.jump_requested = False
 
@@ -994,23 +1103,27 @@ class Player:
                             print(f"[{tick:6}] // coyote time warp speed! //")
                             delta = vec2(x_direction * self.MAX_HORIZONTAL_SPEED, delta.y)
 
-
                 if not self.jumps_remaining:
                     print("jump buffering")
                     jump_buffered_until = tick + self.JUMP_BUFFER_TICKS
                 else:
-                    print(f"--- jump start ---")
-                    delta += self.JUMP
-                    self.state = self.state_start_jump
-                    self.jump_start_pos = self.pos
-                    self.jumps_remaining -= 1
-                    jumped = True
-                    jump_buffered_until = -1
+                    self.jump_forced = self.JUMP
 
-                    level.nursery.do(puff(
-                        self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
-                        vel=vec2(-2 * TILE_SIZE * self.v.x, 5)
-                    ))
+            if self.jump_forced:
+                print(f"--- jump start ---")
+                delta += self.jump_forced
+                self.jump_forced = 0
+
+                self.state = self.state_start_jump
+                self.jump_start_pos = self.pos
+                self.jumps_remaining -= 1
+                jumped = True
+                jump_buffered_until = -1
+
+                level.nursery.do(puff(
+                    self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
+                    vel=vec2(-2 * TILE_SIZE * self.v.x, 5)
+                ))
 
             delta += gravity
 
@@ -1299,6 +1412,9 @@ class Player:
 
             # print(f"[{tick:06}] final {delta=}")
             self.v = delta
+            no_longer_touching = touching - new_touching
+            for tile in no_longer_touching:
+                tile.on_touch_finished()
             touching = new_touching
             perf_end = perf_counter()
             # builtins.print(f"  ** end run physics loop wt={perf_end}**")
@@ -1510,7 +1626,7 @@ async def pauser():
 
 async def main():
     global level
-    level = Level()
+    level = Level("test")
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
         ns.do(pauser())

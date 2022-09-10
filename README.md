@@ -2,8 +2,8 @@
 
 It's time to play GAME NAME HERE!
 
-Install
--------
+How To Install And Run
+----------------------
 
 You need to run the game from your favorite command shell, using a Python "virtual env" or "venv".  First, create a venv in the game directory:
 
