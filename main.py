@@ -1643,9 +1643,17 @@ async def pauser():
                 scene.layers[layer].clear_effect()
 
 
-async def main():
+async def main(args=None):
+    if args is None:
+        args = sys.argv[1:]
+
+    level_name = "test"
+
+    if len(args):
+        level_name = args[0]
+
     global level
-    level = Level("test")
+    level = Level(level_name)
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
         ns.do(pauser())
