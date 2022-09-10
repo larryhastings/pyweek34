@@ -1,0 +1,15 @@
+next level = tutorial_03
+messages = {
+        1 = """
+            More trouble!  A green wall.
+            Well, at least it's easily sorted.
+            """
+        2 = """
+            Uh-oh, this time the second green switch...
+            well... it's just so high!
+
+            If only you had a clever double jump!
+
+            Will fortune favor us twice this day?
+            """
+}

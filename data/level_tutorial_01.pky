@@ -1,0 +1,18 @@
+next level = tutorial_02
+messages = {
+        1 = """
+            Hello, and welcome to the experiment!
+            Oh dear, trouble already.
+            How will you get past that red wall?
+            I know!  Run to the left and hit the red switch...
+            You'll see!
+            """
+        2 = """
+            But now the red path ahead is gone!
+            And it was so long and lovely, too.
+            If only there were a red switch nearby.
+            And if only you could press Space to jump.
+
+            Wait... dare I dream?
+            """
+}

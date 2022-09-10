@@ -1,0 +1,14 @@
+next level = tutorial_04
+messages = {
+        1 = """
+            This one's even higher!
+            I think it's out of reach of your double jump...
+            ... but just barely!
+
+            You know, I've heard you could do a wall kick.
+            Touch the wall while in the air and you can get
+            an extra jump at the end.
+
+            Are the rumors true?
+            """
+}

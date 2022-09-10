@@ -626,6 +626,7 @@ class Level:
         level_map = parse_map(data_path.joinpath(f"level_{name}.tmx"))
         level_metadata = perky.load(data_path.joinpath(f"level_{name}.pky"))
 
+        self.next_level = level_metadata.get("next_level", None)
         messages = level_metadata.get("messages", {})
 
         self.map_size = vec2(level_map.map_size)
@@ -755,6 +756,7 @@ class Level:
                         objects.append(block)
 
         assert self.current_checkpoint, "no initial checkpoint set in map!"
+        self.on_level_completion_changed()
         return objects
 
 
