@@ -31,7 +31,7 @@ TILE_SIZE: int = 18
 FRICTION: float = 0.1
 GRAVITY: float = 20
 TILE_DIMS: vec2 = vec2(TILE_SIZE, TILE_SIZE)
-FONT = "traffolight"
+FONT = "varela"
 
 game = None
 level: Optional['Level'] = None
@@ -717,7 +717,7 @@ class Level:
         layer.parallax = 0
 
         with layer.add_label(
-            self.title.replace('_', ' ').replace(':', ' -'),
+            self.title,
             font=FONT,
             fontsize=48,
             align="center",
