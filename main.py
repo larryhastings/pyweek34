@@ -31,6 +31,7 @@ TILE_SIZE: int = 18
 FRICTION: float = 0.1
 GRAVITY: float = 20
 TILE_DIMS: vec2 = vec2(TILE_SIZE, TILE_SIZE)
+FONT = "traffolight"
 
 game = None
 level: Optional['Level'] = None
@@ -585,7 +586,7 @@ class Signpost(Block):
         if not self.label:
             self.label = scene.layers[hud_layer].add_label(
                 text=self.message,
-                font="checkbk0",
+                font=FONT,
                 color="yellow",
                 fontsize=36,
                 align="left",
@@ -691,12 +692,14 @@ class Level:
             ),
             hud.add_label(
                 self.GEM_TEMPLATE(),
+                font=FONT,
                 fontsize=18,
                 pos=topleft + vec2(47, 27),
             ),
             hud.add_label(
                 self.MONSTER_TEMPLATE(),
                 pos=topright + vec2(-20, 27),
+                font=FONT,
                 fontsize=18,
                 align="right"
             )
@@ -1830,6 +1833,8 @@ async def pauser():
         scene.layers[hud_layer + 1].parallax = 0
         with scene.layers[hud_layer + 1].add_label(
             "Paused",
+            font=FONT,
+            fontsize=64,
             align="center",
         ):
             await w2d.next_event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
@@ -1846,6 +1851,8 @@ async def title_screen():
 
     with layer.add_sprite('logo', pos=(0, -50)), layer.add_label(
         "Press space to begin",
+        font=FONT,
+        fontsize=48,
         align="center",
         pos=(0, 100),
     ) as text:
