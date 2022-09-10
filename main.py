@@ -62,7 +62,7 @@ scene = w2d.Scene(
     width=scene_width,
     height=scene_height,
     ##scaler='nearest'
-    title="The Red Planet",
+    title="Huepocalypse",
 )
 scene.background = (0.9, 0.9, 0.9)
 
@@ -74,7 +74,7 @@ scene.chain = [
     w2d.chain.Light(
         light=w2d.chain.Layers([LIGHT_LAYER]),
         diffuse=w2d.chain.LayerRange(stop=LIGHT_LAYER - 1),
-        ambient=(0.6, 0.3, 0.2, 1.0),
+        ambient=(1.0, 1.0, 1.0, 1.0),
     ),
     w2d.chain.LayerRange(start=LIGHT_LAYER + 1)
 ]
@@ -91,18 +91,19 @@ for color, layer in color_to_layer.items():
 SEMISOLID = "semisolid"
 
 class Block:
+    solid = True
+
     def __init__(self, image, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
         else:
             position = vec2(x, y)
         self.pos = position
-        self.solid = True
 
         # we can have invisible blocks!
         # we use those for the offscreen barrier.
         if image:
-            tile_map = color_tile_maps[gray_layer]
+            tile_map = color_tile_maps['gray']
             tile_map[x, y] = image
 
         level.collision_grid.add(self)
@@ -111,12 +112,14 @@ class Block:
         return f"({int(self.pos.x):3}, {int(self.pos.y):3})"
 
     def __repr__(self):
-        return f"<Block {self.__repr_pos__()}>"
+        return f"<{self.__class__.__name__} {self.__repr_pos__()}>"
 
     def on_touched(self):
         pass
 
 class ColoredBlock(Block):
+    solid = True
+
     def __init__(self, color, image, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
@@ -126,7 +129,6 @@ class ColoredBlock(Block):
         # grid[int(position.x)][int(position.y)].append(self)
         assert color in color_tile_maps, f"{color=} not in {color_tile_maps=}"
         self.color = color
-        self.solid = True
 
         # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
         if image is not None:
@@ -138,7 +140,7 @@ class ColoredBlock(Block):
                 tile_map[x, y] = f"{color}_off_20"
 
         level.collision_grid.add(self)
-        level.color_to_shapes[color].append(self)
+        level.color_to_blocks[color].append(self)
 
     def __repr__(self):
         return f"<ColoredBlock {self.__repr_pos__()} {self.color}>"
@@ -164,6 +166,8 @@ class Death(Block):
 
 
 class Checkpoint(Block):
+    solid = False
+
     deselected_image = "pixel_platformer/tiles/tile_0128"
     selected_image = "pixel_platformer/tiles/tile_0129"
 
@@ -179,7 +183,6 @@ class Checkpoint(Block):
         self.sprite = scene.layers[gray_layer].add_sprite(self.deselected_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
 
         level.collision_grid.add(self)
-        self.solid = False
 
         self.color_state = None
 
@@ -220,6 +223,7 @@ class Checkpoint(Block):
 
 class Collectable(Block):
     nursery: w2d.Nursery
+    solid = False
 
     def __init__(self, image: str, x, y=None):
         if (y is None) and isinstance(x, vec2):
@@ -232,7 +236,6 @@ class Collectable(Block):
         self.collected = False
 
         level.collision_grid.add(self)
-        self.solid = False
 
     def __repr__(self):
         current = "collected" if self.collected == self else "uncollected"
@@ -288,6 +291,8 @@ async def floating_wobble(
 
 
 class Switch(Block):
+    solid = False
+
     def __init__(self, color, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
@@ -303,7 +308,6 @@ class Switch(Block):
         self.off_image = f"{color}_switch_off"
 
         level.collision_grid.add(self)
-        self.solid = False
 
         self.sprite = w2d.Group([
                 scene.layers[sprite_layer].add_sprite(self.on_image, anchor_x=0, anchor_y=0),
@@ -315,7 +319,8 @@ class Switch(Block):
             ],
             pos=self.pos * TILE_SIZE,
         )
-        # set initial wobble
+
+        level.color_to_switches[color].append(self)
 
     def __repr__(self):
         current = "on" if self.sprite[0].image == self.on_image else "off"
@@ -323,13 +328,22 @@ class Switch(Block):
 
     def on_touched(self):
         new_state = level.toggle_color(self.color)
+
+    def set_state(self, on):
         sprite, light = self.sprite
-        if new_state:
+        if on:
             sprite.image = self.on_image
             light.alpha = 1.0
         else:
             sprite.image = self.off_image
             light.alpha = 0.6
+
+
+class JumpRestore(Block):
+    solid = False
+    def on_touched(self):
+        assert player
+        player.jumps_remaining = 2
 
 
 def background_block(image, x, y=None):
@@ -352,7 +366,8 @@ game_clock = main_clock.create_sub_clock()
 class Level:
     def __init__(self):
         self.color_state = {color: True for color in colors}
-        self.color_to_shapes = {color: [] for color in colors}
+        self.color_to_blocks = {color: [] for color in colors}
+        self.color_to_switches = {color: [] for color in colors}
 
         self.collectables = 0
 
@@ -374,6 +389,9 @@ class Level:
         self.color_state[color] = new_state
         scene.layers[color_to_layer[color]].visible = new_state
         scene.layers[color_to_layer[color] + 1].visible = old_state
+
+        for switch in self.color_to_switches[color]:
+            switch.set_state(new_state)
 
         return new_state
 
@@ -432,13 +450,13 @@ class Level:
 
         offset = 0
         for tileset in level_map.tilesets.values():
-            max_id = -1
+            offset = tileset.firstgid
+            # print("tileset", tileset.name)
+            # print("offset", offset)
             for id, tile in tileset.tiles.items():
                 id += offset
                 # print(f"{tileset.name} {id} -> tile {tile.image}")
                 tiles[id] = tile
-                max_id = max(id, max_id)
-            offset = max_id
 
         empty_dict = {}
 
@@ -455,21 +473,21 @@ class Level:
 
             for y, column in enumerate(layer.data):
                 for x, tile_id in enumerate(column):
-                    # print(f"{x=} {y=} {tile_id=}")
                     if not tile_id:
                         continue
-                    tile_id -= 1 # OMG DID YOU JUST DO THIS TO ME PYTILED_PARSER
                     tile = tiles[tile_id]
                     image = tile.image
                     assert image
+
+                    # print(f"{x=} {y=} {tile_id=} {tile=}")
 
                     if block_type_override:
                         background_block(image, x, y)
                         continue
 
                     properties = tile.properties or empty_dict
-                    object_type = tile.properties.get("object", None)
-                    color = tile.properties.get("color", "gray")
+                    object_type = properties.get("object", None)
+                    color = properties.get("color", "gray")
 
                     if object_type == "checkpoint":
                         checkpoint = tile.properties.get("checkpoint", None)
@@ -482,6 +500,8 @@ class Level:
                         block = Collectable(image, x, y)
                     elif object_type == "switch":
                         block = Switch(color, x, y)
+                    elif object_type == "jump restore":
+                        block = JumpRestore(image, x, y)
                     else:
                         block = ColoredBlock(color, image, x, y)
                     if hasattr(block, 'run'):
@@ -606,7 +626,7 @@ class Player:
         scene.camera.pos = self.shape.pos
 
         self.controller = controller
-        self._jumps_remaining = 2
+        self.jumps_remaining = 2
         self.jump_requested = False
 
     async def handle_keys(self):
@@ -744,7 +764,7 @@ class Player:
         falling_gravity = self.FALLING_GRAVITY * dt
 
         self.state = self.state_on_ground
-        assert self._jumps_remaining == 2
+        assert self.jumps_remaining == 2
 
         jumped = False
         jump_buffered_until = -1
@@ -823,7 +843,7 @@ class Player:
                         or (coyote_time_wall_last_x_direction_used != coyote_time_wall_last_x_direction)):
                         # hey! you're using coyote time!
                         print(f"[{tick:6}] // coyote time! //")
-                        self._jumps_remaining = 2
+                        self.jumps_remaining = 2
                         coyote_time_wall_last_x_direction_used = coyote_time_wall_last_x_direction
                         coyote_time_until = -1
                         # if you are jumping during coyote time,
@@ -835,7 +855,7 @@ class Player:
                             delta = vec2(x_direction * self.MAX_HORIZONTAL_SPEED, delta.y)
 
 
-                if not self._jumps_remaining:
+                if not self.jumps_remaining:
                     print("jump buffering")
                     jump_buffered_until = tick + self.JUMP_BUFFER_TICKS
                 else:
@@ -843,7 +863,7 @@ class Player:
                     delta += self.JUMP
                     self.state = self.state_start_jump
                     self.jump_start_pos = self.pos
-                    self._jumps_remaining -= 1
+                    self.jumps_remaining -= 1
                     jumped = True
                     jump_buffered_until = -1
 
@@ -1069,7 +1089,7 @@ class Player:
                             assert delta.y > 0
                             assert delta_remaining.y > 0
                             self.state = self.state_on_ground
-                            self._jumps_remaining = 2
+                            self.jumps_remaining = 2
                             coyote_time_wall_last_x_direction = None
                             coyote_time_wall_last_x_direction_used = None
 
@@ -1116,8 +1136,8 @@ class Player:
                 self.state = self.state_falling
 
                 # take away the jump (leaving just the double jump)...
-                assert self._jumps_remaining == 2, f"{self._jumps_remaining=} but should be 2!"
-                self._jumps_remaining = 1
+                assert self.jumps_remaining == 2, f"{self.jumps_remaining=} but should be 2!"
+                self.jumps_remaining = 1
 
                 # ... but let them have coyote time.
                 coyote_time_until = tick + self.COYOTE_TIME_TICKS

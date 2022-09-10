@@ -1,8 +1,5 @@
-<tileset version="1.2" tiledversion="1.3.2" name="Color Platforms" tilewidth="18" tileheight="18" tilecount="567" columns="0">
+<tileset version="1.9" tiledversion="1.9.1" name="Color Platforms" tilewidth="18" tileheight="18" tilecount="567" columns="0">
  <grid orientation="orthogonal" width="1" height="1" />
- <wangsets>
-  <wangset name="New Wang Set" tile="-1" />
- </wangsets>
 <tile id="0">
   <image width="18" height="18" source="../images/tile_0000_blue.png" />
  <properties><property name="color" value="blue" /></properties></tile>
