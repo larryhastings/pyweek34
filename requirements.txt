@@ -2,3 +2,4 @@
 pytiled-parser==2.2.0
 wasabi-geom>=2
 perky
+pyfxr

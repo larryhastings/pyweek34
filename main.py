@@ -21,6 +21,8 @@ from wasabigeom import vec2
 # import after wasabi2d, this suppresses the PyGame stdout message
 import pygame
 
+pygame.mixer.pre_init(44100, channels=1)
+
 vec2_zero = vec2(0, 0)
 
 TILE_SIZE: int = 18
@@ -94,6 +96,7 @@ scene = w2d.Scene(
     title="Dr. Farb's Huepocalypse",
 )
 scene.background = (0.9, 0.9, 0.9)
+import pyfxrsounds
 
 lights = scene.layers[light_layer]
 hud = scene.layers[hud_layer]
@@ -147,6 +150,7 @@ class Block:
 
     def on_touch_finished(self):
         pass
+
 
 class ColoredBlock(Block):
     solid = True
@@ -364,6 +368,7 @@ class Collectable(Block):
             async with w2d.Nursery() as self.nursery:
                 self.nursery.do(floating_wobble(sprite))
 
+            pyfxrsounds.collect.play()
             await w2d.animate(
                 sprite,
                 pos=sprite.pos + vec2(0, -40),
@@ -566,6 +571,8 @@ game_clock = main_clock.create_sub_clock()
 
 
 class Level:
+    nursery: w2d.Nursery
+
     def __init__(self, name):
         self.name = name
         self.color_state = {color: True for color in colors}
@@ -607,17 +614,26 @@ class Level:
     def toggle_color(self, color):
         assert color != "gray"
 
+        pyfxrsounds.hit.play()
         new_state = not self.color_state[color]
 
-        for color in colors_affected_by_toggle[color]:
-            old_state = self.color_state[color]
+        for c in colors_affected_by_toggle[color]:
+            old_state = self.color_state[c]
             if old_state != new_state:
-                self.color_state[color] = new_state
-                scene.layers[color_to_layer[color]].visible = new_state
+                self.color_state[c] = new_state
+                scene.layers[color_to_layer[c]].visible = new_state
                 scene.layers[color_to_layer[color] + 1].visible = old_state
 
-                for switch in self.color_to_switches[color]:
+                for switch in self.color_to_switches[c]:
                     switch.set_state(new_state)
+
+        if not new_state and color in ('purple', 'blue'):
+            async def restore_color():
+                w2d.sounds.ticking.play()
+                await game_clock.coro.sleep(1.8)
+                if not self.color_state[color]:
+                    self.toggle_color(color)
+            self.nursery.do(restore_color())
 
         return new_state
 
@@ -1153,6 +1169,11 @@ class Player:
                 self.jumps_remaining -= 1
                 jumped = True
                 jump_buffered_until = -1
+
+                if self.jumps_remaining:
+                    pyfxrsounds.jump1.play()
+                else:
+                    pyfxrsounds.jump2.play()
 
                 level.nursery.do(puff(
                     self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
