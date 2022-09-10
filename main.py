@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from itertools import chain, cycle
 import collision
 import math
+import os
 from pathlib import Path
 import perky
 from pytiled_parser import parse_map
@@ -1903,6 +1904,35 @@ async def level_progression(start_level: str = START_LEVEL):
             break
 
 
+def check_levels_are_connected():
+    data_path = gamedir_path.joinpath("data")
+    os.chdir(str(data_path))
+    import glob
+    level_files = set(glob.glob("*.tmx"))
+
+    name = START_LEVEL
+    while True:
+        print(name)
+        if name == "you_win":
+            break
+        level_metadata = perky.load(data_path.joinpath(f"level_{name}.pky"))
+        level_filename = f"level_{name}.tmx"
+        assert level_filename in level_files, "can't find " + level_filename
+        level_files.discard(level_filename)
+        name = level_metadata['next level']
+
+    print()
+    if level_files:
+        print("These tmx files aren't used:")
+        for tmx in sorted(level_files):
+            print("   ", tmx)
+        print("But we can get from start to you_win")
+    else:
+        print("All are used and reachable!")
+    sys.exit(0)
+
+
+
 async def main(args=None):
     if args is None:
         args = sys.argv[1:]
@@ -1912,8 +1942,12 @@ async def main(args=None):
     if len(args):
         if args[0] in ("-c", "--challenge"):
             level_name = "jump_lots"
+        elif args[0] == "--check":
+            check_levels_are_connected()
+            sys.exit()
         else:
             level_name = args[0]
+
 
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
