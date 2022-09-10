@@ -32,7 +32,7 @@ TILE_SIZE: int = 18
 FRICTION: float = 0.1
 GRAVITY: float = 20
 TILE_DIMS: vec2 = vec2(TILE_SIZE, TILE_SIZE)
-FONT = "traffolight"
+FONT = "varela"
 
 game = None
 level: Optional['Level'] = None
@@ -318,7 +318,7 @@ class DeparturePoint(Block):
     solid = False
     activated = False
 
-    activated_image = "pixel_platformer/tiles/tile_0148"
+    activated_image = "exit_open"
 
     def __init__(self, image, x, y=None):
         if (y is None) and isinstance(x, vec2):
@@ -326,7 +326,7 @@ class DeparturePoint(Block):
         else:
             position = vec2(x, y)
         self.pos = position
-        self.sprite = scene.layers[gray_layer].add_sprite(image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        self.sprite = scene.layers[gray_layer].add_sprite("exit_locked", pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
 
         level.collision_grid.add(self)
         level.level_complete_callbacks.append(self.on_level_complete)
@@ -718,11 +718,10 @@ class Level:
         layer.parallax = 0
 
         with layer.add_label(
-            self.title.replace('_', ' ').replace(':', ' -'),
+            self.title,
             font=FONT,
             fontsize=48,
             align="center",
-            pos=(0, 100),
         ):
             await main_clock.coro.sleep(2)
 
