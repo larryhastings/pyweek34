@@ -709,6 +709,22 @@ class Level:
         ])
         return self.hud
 
+    async def show_title(self):
+        if not self.title:
+            return
+
+        layer = scene.layers[hud_layer + 1]
+        layer.parallax = 0
+
+        with layer.add_label(
+            self.title.replace('_', ' ').replace(':', ' -'),
+            font=FONT,
+            fontsize=48,
+            align="center",
+            pos=(0, 100),
+        ):
+            await main_clock.coro.sleep(2)
+
     async def run(self):
         global player
         objects = self.load_map(self.name)
@@ -716,6 +732,7 @@ class Level:
         self.total_monsters = self.monsters
         # print(f"level has {self.gems} gems to collect.")
         try:
+            await self.show_title()
             with self.mkhud():
                 async with w2d.Nursery() as self.nursery:
                     for obj in objects:
@@ -769,6 +786,7 @@ class Level:
         level_map = parse_map(data_path.joinpath(f"level_{name}.tmx"))
         level_metadata = perky.load(data_path.joinpath(f"level_{name}.pky"))
 
+        self.title = level_metadata.get("name")
         self.next_level = level_metadata.get("next level", None)
         messages = level_metadata.get("messages", {})
 
