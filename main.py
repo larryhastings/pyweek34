@@ -379,6 +379,13 @@ class Collectable(Block):
                 angle=-0.2,
             )
             await game_clock.coro.sleep(0.5)
+            await w2d.animate(
+                sprite,
+                duration=0.3,
+                pos=scene.camera.pos + vec2(scene.width, -scene.height) * 0.5,
+                scale=0.01,
+                angle=10,
+            )
 
 
 async def floating_wobble(
