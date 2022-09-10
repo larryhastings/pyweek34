@@ -249,8 +249,8 @@ class Monster(Block):
 class Checkpoint(Block):
     solid = False
 
-    deselected_image = "pixel_platformer/tiles/tile_0128"
-    selected_image = "pixel_platformer/tiles/tile_0129"
+    selected_image = "pixel_platformer/tiles/tile_0128"
+    deselected_image = "pixel_platformer/tiles/tile_0129"
 
     def __init__(self, image, x, y=None, *, initial=False):
         if (y is None) and isinstance(x, vec2):

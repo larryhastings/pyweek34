@@ -1,0 +1,15 @@
+next level = tutorial_07
+messages = {
+        1 = """
+            Oh!  It looks like our jump restorers are
+            back online.  These give you back your
+            double-jump in mid-air!  Scaling this wall
+            should be no problem.
+            """
+
+        2 = """
+            A gem!  You better get it!
+
+            You better get all of them.
+            """
+}
