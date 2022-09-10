@@ -70,3 +70,17 @@ spring = pygame.mixer.Sound(buffer=pyfxr.SFX(
     hpf_ramp=0.11,
     wave_type=pyfxr.WaveType.SINE,
 ))
+
+laser = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.524,
+    freq_limit=0.011,
+    freq_ramp=-0.352,
+    duty=0.794,
+    duty_ramp=-0.651,
+    env_attack=0.0,
+    env_sustain=0.189,
+    env_decay=0.255,
+    pha_offset=0.147,
+    pha_ramp=-0.027,
+    wave_type=pyfxr.WaveType.SQUARE,
+))

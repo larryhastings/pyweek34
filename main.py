@@ -813,6 +813,7 @@ class Controller:
 async def shoot(player: 'Player', direction: vec2):
     """Fire a shot."""
     SPEED = 30
+    pyfxrsounds.laser.play()
 
     rgb = (1, 1, 1)
 
