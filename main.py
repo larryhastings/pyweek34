@@ -698,17 +698,13 @@ async def shoot(player: 'Player', direction: vec2):
                     if isinstance(obj, Monster):
                         obj.on_shot()
                         ns.cancel()
-                        continue
-
-                    match obj:
-                        case Switch():
-                            if obj not in touching:
-                                obj.on_touched(None, None)
-                            new_touching.add(obj)
-                            ns.cancel()
-
-                        case Block(solid=True):
-                            ns.cancel()
+                    elif isinstance(obj, Switch):
+                        if obj not in touching:
+                            obj.on_touched(None, None)
+                        new_touching.add(obj)
+                        ns.cancel()
+                    elif isinstance(obj, Block) and obj.solid:
+                        ns.cancel()
 
             pos += delta
             sprite.pos = pos * TILE_SIZE
