@@ -88,6 +88,22 @@ that color back on.
 
 (Gray platforms are super safe--they never disappear on you.)
 
+But it gets more complicated!  When you turn on or off one
+of the three *secondary* colors, it also affects the two
+related *primary* colors:
+
+* orange also affects red and yellow
+* green also affects yellow and blue
+* purple also affects blue and red
+
+When you turn off orange, you turn off red, orange, and yellow!
+And when you turn orange back on, you turn red, orange, and yellow
+all back on!
+
+(But it doesn't go the other way--toggling red doesn't affect
+orange or purple.)
+
+
 Terrain
 -------
 
@@ -99,6 +115,10 @@ You'll see the following things in levels:
 * Colored platforms!  These are platforms that disappear when
   you turn a color off--and reappear when you turn the color back
   on again.
+
+* A shiny new Whitegun!  This is a gun that shoots the color white.
+  Use it to whitewash Monsters out of existence.  You can also shoot
+  color switches!
 
 * Color actuators!  These are colored tubes that give you the ability
   to toggle a color whenever you want!  Only lasts through the end
@@ -116,8 +136,8 @@ You'll see the following things in levels:
 
 But it's not all good news.  You'll also see:
 
-* Monsters!  You have to kill all of them, by shooting them.
-  But be careful, if you touch one it'll kill you!
+* Monsters!  You have to kill all of them--and the only way is
+  by shooting them. But be careful, if you touch one it'll kill you!
 
 * Spikes!  If you fall on them you die!  Well, there's one exception:
   if you jump up through spikes from below, you'll pass through them safely!

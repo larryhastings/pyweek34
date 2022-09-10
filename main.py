@@ -58,6 +58,20 @@ color_to_rgb = {
     'gray': (0.6, 0.6, 0.6),
 }
 
+primary_colors = {'red', 'yellow', 'blue'}
+secondary_colors = {'orange', 'green', 'purple'}
+
+color_to_related_colors = {
+    'red': ['purple', 'orange'],
+    'orange': ['red', 'yellow',],
+    'yellow': ['orange', 'green'],
+    'green': ['yellow', 'blue',],
+    'blue': ['green', 'purple'],
+    'purple': ['blue', 'red',],
+    'gray': ['gray'],
+}
+
+
 scene_width = 900
 scene_height = 540
 
@@ -67,7 +81,7 @@ scene = w2d.Scene(
     width=scene_width,
     height=scene_height,
     ##scaler='nearest'
-    title="Huepocalypse",
+    title="Dr. Farb's Huepocalypse",
 )
 scene.background = (0.9, 0.9, 0.9)
 
@@ -581,14 +595,19 @@ class Level:
 
     def toggle_color(self, color):
         assert color != "gray"
-        old_state = self.color_state[color]
-        new_state = not old_state
-        self.color_state[color] = new_state
-        scene.layers[color_to_layer[color]].visible = new_state
-        scene.layers[color_to_layer[color] + 1].visible = old_state
+        new_state = not self.color_state[color]
+        all_colors = color_to_related_colors[color].copy()
+        all_colors.append(color)
 
-        for switch in self.color_to_switches[color]:
-            switch.set_state(new_state)
+        for color in color_to_related_colors[color]:
+            old_state = self.color_state[color]
+            if old_state != new_state:
+                self.color_state[color] = new_state
+                scene.layers[color_to_layer[color]].visible = new_state
+                scene.layers[color_to_layer[color] + 1].visible = old_state
+
+                for switch in self.color_to_switches[color]:
+                    switch.set_state(new_state)
 
         return new_state
 
