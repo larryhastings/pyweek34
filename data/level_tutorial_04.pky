@@ -1,14 +1,10 @@
 next level = tutorial_05
 messages = {
         1 = """
-            This one's even higher!
-            I think it's out of reach of your double jump...
-            ... but just barely!
+            Okay, this just doesn't make sense.  How could
+            anyone get that high?
 
-            You know, I've heard you could do a wall kick.
-            Touch the wall while in the air and you can get
-            an extra jump at the end.
-
-            Are the rumors true?
+            Unless, maybe, the springboards are working again?
+            Try it!
             """
 }

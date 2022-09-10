@@ -501,6 +501,7 @@ class Springboard(Block):
         if self.state == "low":
             self.sprite.image = self.high_image
             player.jump_forced = player.JUMP * 2
+            player.v = vec2_zero
 
     def on_touch_finished(self):
         self.state = "low"
@@ -822,6 +823,8 @@ async def shoot(player: 'Player', direction: vec2):
             new_touching = set()
             for t, loc, hits in collisions:
                 for obj in hits:
+                    if isinstance(obj, ColoredBlock) and not level.color_state[obj.color]:
+                        continue
                     if isinstance(obj, Monster):
                         obj.on_shot()
                         ns.cancel()
@@ -829,6 +832,7 @@ async def shoot(player: 'Player', direction: vec2):
                         if obj not in touching:
                             obj.on_touched(None, None)
                         new_touching.add(obj)
+                        ns.cancel()
                     elif isinstance(obj, Block) and obj.solid:
                         ns.cancel()
 

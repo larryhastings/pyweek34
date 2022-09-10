@@ -1,0 +1,23 @@
+next level = tutorial_06
+messages = {
+        1 = """
+            Get the gun!  You'll need it!
+
+            I bet if you stand on that pass-through
+            platform above, you can shoot the red
+            switch off to the right there.
+
+            Press Enter to shoot in the direction
+            you're facing!
+            """
+
+        2 = """
+            Warning: monsters ahead!
+
+            Good thing you've got the whitegun--
+            it's just the thing!
+
+            And look!  A checkpoint!  That might save
+            you some time!
+            """
+}
