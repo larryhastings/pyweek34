@@ -4,7 +4,7 @@ from abc import abstractmethod
 import bisect
 import builtins
 from dataclasses import dataclass
-from itertools import cycle
+from itertools import chain, cycle
 import collision
 import math
 from pathlib import Path
@@ -239,6 +239,7 @@ class Monster(Block):
     def on_shot(self):
         if not self.dead:
             self.sprite.delete()
+            self.sprite = None
             level.collision_grid.remove(self)
             level.monsters -= 1
             level.on_level_completion_changed()
@@ -246,6 +247,10 @@ class Monster(Block):
     def on_touched(self, player, delta):
         if not self.dead:
             player.nursery.cancel()
+
+    def delete(self):
+        if self.sprite:
+            self.sprite.delete()
 
 
 class Checkpoint(Block):
@@ -285,6 +290,9 @@ class Checkpoint(Block):
             # DAN: add sparkle animation here
             pass
 
+    def delete(self):
+        self.sprite.delete()
+
     def __repr__(self):
         current = "current" if level.current_checkpoint == self else "unselected"
         return f"<Checkpoint {self.__repr_pos__()} {current}>"
@@ -321,10 +329,12 @@ class DeparturePoint(Block):
         level.collision_grid.add(self)
         level.level_complete_callbacks.append(self.on_level_complete)
 
+    def delete(self):
+        self.sprite.delete()
 
     def on_touched(self, player, delta):
         if self.activated:
-            print("LEVEL COMPLETE")
+            level.nursery.cancel()
             pass
 
     def on_level_complete(self):
@@ -517,6 +527,9 @@ class Springboard(Block):
 
         self.sprite = scene.layers[gray_layer].add_sprite(self.low_image, pos=self.pos * TILE_SIZE, anchor_x=0, anchor_y=0)
 
+    def delete(self):
+        self.sprite.delete()
+
     def on_touched(self, player, delta):
         if self.state == "low":
             self.sprite.image = self.high_image
@@ -666,6 +679,7 @@ class Level:
 
         self.current_checkpoint = None
         self.physical_objects = {}
+        self.finalisers = []
 
     def mkhud(self):
         topleft = scene.dims * -0.5
@@ -695,11 +709,17 @@ class Level:
         self.total_gems = self.gems
         self.total_monsters = self.monsters
         # print(f"level has {self.gems} gems to collect.")
-        with self.mkhud():
-            async with w2d.Nursery() as self.nursery:
-                for obj in objects:
-                    self.nursery.do(obj.run())
-                self.nursery.do(run_lives())
+        try:
+            with self.mkhud():
+                async with w2d.Nursery() as self.nursery:
+                    for obj in objects:
+                        self.nursery.do(obj.run())
+                    self.nursery.do(run_lives())
+        finally:
+            for func in self.finalisers:
+                func()
+            for tile_map in chain(color_tile_maps.values(), color_off_tile_maps.values()):
+                tile_map.clear()
 
     def on_level_completion_changed(self):
         # print(f"level now has {self.gems} gems to collect.")
@@ -743,7 +763,7 @@ class Level:
         level_map = parse_map(data_path.joinpath(f"level_{name}.tmx"))
         level_metadata = perky.load(data_path.joinpath(f"level_{name}.pky"))
 
-        self.next_level = level_metadata.get("next_level", None)
+        self.next_level = level_metadata.get("next level", None)
         messages = level_metadata.get("messages", {})
 
         self.map_size = vec2(level_map.map_size)
@@ -879,6 +899,8 @@ class Level:
                         block = ColoredBlock(color, image, x, y)
                     if hasattr(block, 'run'):
                         objects.append(block)
+                    if hasattr(block, 'delete'):
+                        self.finalisers.append(block.delete)
 
         assert self.current_checkpoint, "no initial checkpoint set in map!"
         assert departure_point, "no departure point set in map!"
@@ -1810,21 +1832,34 @@ async def pauser():
                 scene.layers[layer].clear_effect()
 
 
+START_LEVEL = 'tutorial_01'
+
+
+async def level_progression(start_level: str = START_LEVEL):
+    global level
+    level_name = start_level
+    while True:
+        level = Level(level_name)
+        await level.run()
+        if not (level_name := level.next_level):
+            print("That's all the levels we have, thanks for playing!")
+            break
+
+
 async def main(args=None):
     if args is None:
         args = sys.argv[1:]
 
-    level_name = "test"
+    level_name = START_LEVEL
 
     if len(args):
         level_name = args[0]
 
-    global level
-    level = Level(level_name)
     async with w2d.Nursery() as ns:
         ns.do(drive_main_clock())
         ns.do(pauser())
-        ns.do(level.run())
+        await level_progression(level_name)
+        ns.cancel()
 
 
 w2d.run(main())
