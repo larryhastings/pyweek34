@@ -3,6 +3,7 @@
 from abc import abstractmethod
 import bisect
 import builtins
+from itertools import cycle
 import collision
 import math
 from pathlib import Path
@@ -895,7 +896,11 @@ class Player:
     def __init__(self, pos: vec2, controller: Controller):
         self.v = vec2(0, 0)
         self.facing = 1
-        self.shape = scene.layers[player_layer].add_sprite("pixel_platformer/tiles/tile_0145", pos=pos * TILE_SIZE, anchor_x=0, anchor_y=0)
+        self.sprite = scene.layers[player_layer].add_sprite("player_standing", pos=0.5 * TILE_DIMS)
+        self.shape = w2d.Group(
+            [self.sprite],
+            pos=pos * TILE_SIZE,
+        )
 
         scene.camera.pos = self.shape.pos
 
@@ -945,9 +950,35 @@ class Player:
 
                 ## compute new game state
                 ns.do(self.run_physics())
+                ns.do(self.animate_sprite())
 
                 ## render
                 ns.do(self.camera_tracking())
+
+            pyfxrsounds.death.play()
+            w2d.animate(
+                self.sprite,
+                tween='decelerate',
+                duration=2,
+                angle=12,
+            )
+            v = vec2(
+                self.v.x * 0.5,
+                -3,
+            ) * TILE_SIZE
+            async for dt in game_clock.coro.frames_dt(seconds=2):
+                self.shape.pos += v * dt
+                v += vec2(0, 200) * dt
+
+
+    async def animate_sprite(self):
+        for frame in cycle(range(1, 7)):
+            self.sprite.scale_x = self.facing
+            if abs(self.v.x) < 0.01 or abs(self.v.y) > 0.01:
+                self.sprite.image = 'player_standing'
+            else:
+                self.sprite.image = f'player_walk{frame}'
+            await game_clock.coro.sleep(0.1)
 
     async def shoot(self):
         while True:
