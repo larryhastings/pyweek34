@@ -659,7 +659,7 @@ class Level:
         elif self._monsters:
             return f"{self._monsters} monsters remaining"
         else:
-            return "All clear"
+            return "No monsters remaining"
     monsters = HUDBound(2, MONSTER_TEMPLATE)
     total_monsters = HUDBound(2, MONSTER_TEMPLATE)
 
