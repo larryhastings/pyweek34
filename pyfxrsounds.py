@@ -84,3 +84,17 @@ laser = pygame.mixer.Sound(buffer=pyfxr.SFX(
     pha_ramp=-0.027,
     wave_type=pyfxr.WaveType.SQUARE,
 ))
+
+restore = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.14,
+    freq_limit=0.0,
+    freq_ramp=0.18,
+    freq_dramp=0.07,
+    duty=0.21,
+    vib_strength=0.681,
+    vib_speed=0.38,
+    env_attack=0.0,
+    env_sustain=0.0,
+    env_decay=0.51,
+    wave_type=pyfxr.WaveType.SQUARE,
+))

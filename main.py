@@ -544,6 +544,7 @@ class JumpRestore(Block):
     def on_touched(self, player, delta):
         assert player
         player.jumps_remaining = 2
+        pyfxrsounds.restore.play()
 
 
 class Signpost(Block):
