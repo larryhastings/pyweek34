@@ -54,3 +54,47 @@ death = pygame.mixer.Sound(buffer=pyfxr.SFX(
     pha_ramp=0.46,
     wave_type=pyfxr.WaveType.SINE,
 ))
+
+spring = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.34,
+    freq_ramp=-0.06,
+    duty=0.0,
+    vib_strength=0.46,
+    vib_speed=0.4,
+    env_attack=0.05,
+    env_sustain=0.0,
+    env_decay=0.72,
+    env_punch=0.17,
+    lpf_freq=1.0,
+    hpf_freq=0.16,
+    hpf_ramp=0.11,
+    wave_type=pyfxr.WaveType.SINE,
+))
+
+laser = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.524,
+    freq_limit=0.011,
+    freq_ramp=-0.352,
+    duty=0.794,
+    duty_ramp=-0.651,
+    env_attack=0.0,
+    env_sustain=0.189,
+    env_decay=0.255,
+    pha_offset=0.147,
+    pha_ramp=-0.027,
+    wave_type=pyfxr.WaveType.SQUARE,
+))
+
+restore = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.14,
+    freq_limit=0.0,
+    freq_ramp=0.18,
+    freq_dramp=0.07,
+    duty=0.21,
+    vib_strength=0.681,
+    vib_speed=0.38,
+    env_attack=0.0,
+    env_sustain=0.0,
+    env_decay=0.51,
+    wave_type=pyfxr.WaveType.SQUARE,
+))

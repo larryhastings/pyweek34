@@ -370,11 +370,21 @@ class Collectable(Block):
                 self.nursery.do(floating_wobble(sprite))
 
             pyfxrsounds.collect.play()
+
             await w2d.animate(
                 sprite,
-                pos=sprite.pos + vec2(0, -40),
+                duration=0.4,
+                pos=sprite.pos + vec2(0, -50),
                 scale=1.8,
                 angle=-0.2,
+            )
+            await game_clock.coro.sleep(0.5)
+            await w2d.animate(
+                sprite,
+                duration=0.3,
+                pos=scene.camera.pos + vec2(scene.width, -scene.height) * 0.5,
+                scale=0.01,
+                angle=10,
             )
 
 
@@ -465,6 +475,9 @@ class Switch(Block):
 
         level.color_to_switches[color].append(self)
 
+    def delete(self):
+        self.sprite.delete()
+
     def __repr__(self):
         current = "on" if self.sprite[0].image == self.on_image else "off"
         return f"<Switch {self.__repr_pos__()} {self.color} {current}>"
@@ -508,6 +521,7 @@ class Springboard(Block):
             self.sprite.image = self.high_image
             player.jump_forced = player.JUMP * 2
             player.v = vec2_zero
+            pyfxrsounds.spring.play()
 
     def on_touch_finished(self):
         self.state = "low"
@@ -516,9 +530,21 @@ class Springboard(Block):
 
 class JumpRestore(Block):
     solid = False
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.light = lights.add_sprite(
+            'point_light',
+            pos=self.pos * TILE_SIZE,
+            color=(0.6, 1.0, 0.6, 0.3),
+        )
+
+    def delete(self):
+        self.light.delete()
+
     def on_touched(self, player, delta):
         assert player
         player.jumps_remaining = 2
+        pyfxrsounds.restore.play()
 
 
 class Signpost(Block):
@@ -535,6 +561,11 @@ class Signpost(Block):
 
         level.collision_grid.add(self)
         self.label = None
+
+    def delete(self):
+        self.sprite.delete()
+        if self.label:
+            self.label.delete()
 
     def on_touched(self, player, delta):
         if not self.label:
@@ -822,6 +853,7 @@ class Controller:
 async def shoot(player: 'Player', direction: vec2):
     """Fire a shot."""
     SPEED = 30
+    pyfxrsounds.laser.play()
 
     rgb = (1, 1, 1)
 
@@ -1164,6 +1196,8 @@ class Player:
             else:
                 gravity = falling_gravity
 
+            jump_sound = True
+
             # if something external is making us jump
             # (e.g. a springboard)
             # reset delta.y, but also give back both jumps.
@@ -1177,6 +1211,7 @@ class Player:
                 self.jumps_remaining = 2
                 self.jump_requested = False
                 coyote_time_until = -1
+                jump_sound = False
 
             if self.jump_requested:
                 self.jump_requested = False
@@ -1214,10 +1249,11 @@ class Player:
                 jumped = True
                 jump_buffered_until = -1
 
-                if self.jumps_remaining:
-                    pyfxrsounds.jump1.play()
-                else:
-                    pyfxrsounds.jump2.play()
+                if jump_sound:
+                    if self.jumps_remaining:
+                        pyfxrsounds.jump1.play()
+                    else:
+                        pyfxrsounds.jump2.play()
 
                 level.nursery.do(puff(
                     self.shape.pos + vec2((-self.v.x + 0.5) * TILE_SIZE, TILE_SIZE),
