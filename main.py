@@ -955,6 +955,22 @@ class Player:
                 ## render
                 ns.do(self.camera_tracking())
 
+            pyfxrsounds.death.play()
+            w2d.animate(
+                self.sprite,
+                tween='decelerate',
+                duration=2,
+                angle=12,
+            )
+            v = vec2(
+                self.v.x * 0.5,
+                -3,
+            ) * TILE_SIZE
+            async for dt in game_clock.coro.frames_dt(seconds=2):
+                self.shape.pos += v * dt
+                v += vec2(0, 200) * dt
+
+
     async def animate_sprite(self):
         for frame in cycle(range(1, 7)):
             self.sprite.scale_x = self.facing

@@ -38,3 +38,19 @@ collect = pygame.mixer.Sound(buffer=pyfxr.SFX(
     env_punch=0.47,
     wave_type=pyfxr.WaveType.SQUARE,
 ))
+
+death = pygame.mixer.Sound(buffer=pyfxr.SFX(
+    base_freq=0.64,
+    freq_limit=0.0,
+    freq_ramp=-0.14,
+    duty=0.648,
+    duty_ramp=-0.192,
+    vib_strength=0.33,
+    vib_speed=0.29,
+    env_attack=0.0,
+    env_sustain=0.41,
+    env_decay=0.5,
+    pha_offset=0.0,
+    pha_ramp=0.46,
+    wave_type=pyfxr.WaveType.SINE,
+))
