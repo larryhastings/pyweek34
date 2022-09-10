@@ -7,6 +7,7 @@ import collision
 from pytiled_parser import parse_map
 import random
 import sys
+import time
 from typing import Optional
 import wasabi2d.loop
 from wasabi2d.clock import Clock
@@ -642,6 +643,10 @@ player_max_jumps = 2
 player_max_dashes = 1
 
 
+perf_max_collisions = -1
+perf_max_loop = -1
+
+
 class Controller:
     KEYBOARD = w2d.keyboard.keyboard
 
@@ -902,6 +907,10 @@ class Player:
         coyote_time_wall_last_x_direction = None
         coyote_time_wall_last_x_direction_used = None
 
+        perf_counter = time.perf_counter
+        global perf_max_loop
+        global perf_max_collisions
+
         # The set of things we are already touching.
         # We only fire on_touched() events for objects that we are newly
         # touching.
@@ -924,6 +933,8 @@ class Player:
             tick += 1
             new_touching = set()
             print(f"[{tick:05} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
+            perf_start = perf_counter()
+            # builtins.print(f"  ** start run physics loop {perf_start=}**")
 
             if 0:
                 # this is just a sanity check, it's not needed for the game to work.
@@ -1024,9 +1035,10 @@ class Player:
             found_a_solid_collision = False
             delta_remaining = delta
 
-            print("  ** start checking for collisions **")
+            perf_start_collisions = perf_counter()
+            # builtins.print(f"  ** start checking for collisions {perf_start_collisions=}**")
             while checking_for_collisions:
-                print(f"  check for collisions with {self.pos=} {delta_remaining=}")
+                # print(f"  check for collisions with {self.pos=} {delta_remaining=}")
                 for t, collision_pos, hit in level.collision_grid.collide_moving_pawn(
                     self,
                     delta_remaining,
@@ -1035,7 +1047,7 @@ class Player:
                     passthrough_tiles = []
 
                     for tile in hit:
-                        assert hasattr(tile, 'solid')
+                        # assert hasattr(tile, 'solid')
                         # if it's a solid block, and
                         #    it's not a colored block,
                         #    OR it's a colored block but its color is on,
@@ -1121,7 +1133,7 @@ class Player:
                     # and you probably don't care in what way.
 
                     # special-cased for this game
-                    assert self.size == vec2(1, 1)
+                    # assert self.size == vec2(1, 1)
                     def pawn_overlaps_tile_in_x(tile):
                         return not ( ((self.pos.x + 1) <= tile.pos.x) or (self.pos.x >= (tile.pos.x + 1)) )
                     def pawn_overlaps_tile_in_y(tile):
@@ -1155,13 +1167,13 @@ class Player:
 
                         if tile_overlaps_in_x:
                             hit_y = True
-                            assert (not tile_overlaps_in_y) or (t==0)
+                            # assert (not tile_overlaps_in_y) or (t==0)
                         elif tile_overlaps_in_y:
                             hit_x = True
-                            assert (not tile_overlaps_in_x) or (t==0)
+                            # assert (not tile_overlaps_in_x) or (t==0)
                         else:
                             # neither
-                            assert (not (tile_overlaps_in_x or tile_overlaps_in_y)) or (t==0)
+                            # assert (not (tile_overlaps_in_x or tile_overlaps_in_y)) or (t==0)
                             hit_corner = True
 
                     if hit_x:
@@ -1179,17 +1191,17 @@ class Player:
                         # we must be moving in both x and y.
                         # y is more important, so we behave like
                         # this is hitting floor/ceiling.
-                        assert len(solid_tiles) == 1
-                        assert bool(delta_remaining.x) and bool(delta_remaining.y)
-                        assert not (hit_x or hit_y)
+                        # assert len(solid_tiles) == 1
+                        # assert bool(delta_remaining.x) and bool(delta_remaining.y)
+                        # assert not (hit_x or hit_y)
                         hit_y = True
                         print("hit corner, so {hit_x=} {hit_y=}")
 
                     if hit_x:
                         # stop sideways motion
                         # but also! cap vertical motion ("wall scrape")
-                        assert delta.x
-                        assert delta_remaining.x
+                        # assert delta.x
+                        # assert delta_remaining.x
                         print("  hit in x, stop sideways motion, also cap vertical motion ('wall scrape')")
                         print(f"    before hit in x: {delta=} {delta_remaining=}  {self.WALL_FRICTION_MAX_SPEED=}")
                         max_y_velocity = self.WALL_FRICTION_MAX_SPEED
@@ -1200,7 +1212,7 @@ class Player:
                         delta_remaining_y = delta_remaining.y
                         delta_y = delta.y
                         if delta_remaining_y > 0:
-                            assert delta_y > 0
+                            # assert delta_y > 0
                             t_remaining = delta_remaining_y / delta_y
                             delta_remaining_y = min(delta_remaining_y, max_y_velocity * t_remaining)
                             delta_y = min(delta_y, max_y_velocity)
@@ -1220,8 +1232,8 @@ class Player:
                         print("  hit in y, stop vertical motion")
                         if self.state == self.state_falling:
                             print("    ... and we're back on the ground.")
-                            assert delta.y > 0
-                            assert delta_remaining.y > 0
+                            # assert delta.y > 0
+                            # assert delta_remaining.y > 0
                             self.state = self.state_on_ground
                             self.jumps_remaining = 2
                             coyote_time_wall_last_x_direction = None
@@ -1252,7 +1264,7 @@ class Player:
                         delta_remaining = vec2(delta_remaining.x, 0)
 
                     if delta == vec2_zero:
-                        assert delta_remaining == vec2_zero, f"{delta_remaining=} != vec2_zero!"
+                        # assert delta_remaining == vec2_zero, f"{delta_remaining=} != vec2_zero!"
                         checking_for_collisions = False
 
                     # this break is for the current collide_moving_pawn iterator.
@@ -1270,7 +1282,7 @@ class Player:
                 self.state = self.state_falling
 
                 # take away the jump (leaving just the double jump)...
-                assert self.jumps_remaining == 2, f"{self.jumps_remaining=} but should be 2!"
+                # assert self.jumps_remaining == 2, f"{self.jumps_remaining=} but should be 2!"
                 self.jumps_remaining = 1
 
                 # ... but let them have coyote time.
@@ -1288,6 +1300,15 @@ class Player:
             # print(f"[{tick:06}] final {delta=}")
             self.v = delta
             touching = new_touching
+            perf_end = perf_counter()
+            # builtins.print(f"  ** end run physics loop wt={perf_end}**")
+            perf_loop = perf_end - perf_start
+            perf_collisions = perf_end - perf_start_collisions
+            perf_max_loop = max(perf_loop, perf_max_loop)
+            perf_max_collisions = max(perf_collisions, perf_max_collisions)
+            # builtins.print(f"     {perf_loop=} {perf_max_loop=} {perf_collisions=} {perf_max_collisions=}")
+            print()
+
 
     async def camera_tracking(self):
         last_pos = target_pos = self.shape.pos
@@ -1458,7 +1479,7 @@ async def drive_main_clock():
     next_tick_fractional = tick_offsets[next_tick_index]
 
     async for t in wasabi2d.clock.coro.frames():
-        assert t >= next_tick_seconds
+        # assert t >= next_tick_seconds
         fractional = t - next_tick_seconds
         ticks = 0
         while fractional >= next_tick_fractional:
@@ -1468,7 +1489,7 @@ async def drive_main_clock():
 
             next_tick_index += 1
             if next_tick_index == 60:
-                assert next_tick_fractional == 1
+                # assert next_tick_fractional == 1
                 next_tick_index = 0
                 fractional -= 1
                 next_tick_seconds += 1

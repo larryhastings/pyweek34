@@ -157,7 +157,7 @@ class GridCollider(Generic[T]):
 
                 # print(f"      {coord=} {next_coord=} {t=} {coord_at_time_t=}")
 
-                assert coord_at_time_t >= coord
+                # assert coord_at_time_t >= coord
 
                 yield (t, yield_value)
 
@@ -340,7 +340,7 @@ class GridCollider(Generic[T]):
           pos is the position the pawn was at at time t
           hits is the same return value as from collision().
         """
-        assert isinstance(delta, vec2)
+        # assert isinstance(delta, vec2)
         if pos is None:
             pos = pawn.pos
         pos = vec2(pos)
@@ -390,12 +390,12 @@ class GridCollider(Generic[T]):
         # If the list is empty, the pawn never hit anything.
         # if the list is not empty, sort it lowest first and return list[0].
 
-        x_aligned = 0 if modf(pos.x)[0] else 1
-        y_aligned = 0 if modf(pos.y)[0] else 1
+        # x_aligned = 0 if modf(pos.x)[0] else 1
+        # y_aligned = 0 if modf(pos.y)[0] else 1
 
         size = vec2(pawn.size)
-        size_x_aligned = 0 if modf(size.x)[0] else 1
-        size_y_aligned = 0 if modf(size.y)[0] else 1
+        # size_x_aligned = 0 if modf(size.x)[0] else 1
+        # size_y_aligned = 0 if modf(size.y)[0] else 1
 
         top_right = pos + size
 
@@ -420,7 +420,7 @@ class GridCollider(Generic[T]):
                 towards = inf
                 # print(f"  check_moving_pawn_along_one_coordinate: moving right or down in {attr=}, {sign=} {towards=}")
                 def coord_to_cell(coord):
-                    assert coord >= 0
+                    # assert coord >= 0
                     fractional, integer = modf(coord)
                     if fractional:
                         return integer
@@ -429,12 +429,12 @@ class GridCollider(Generic[T]):
                     # don't call this with a "cell"!
                     # 53.0 is in cell 52.
                     # always call this with a "coord".
-                    assert coord >= 0
+                    # assert coord >= 0
                     fractional, integer = modf(coord)
                     if fractional:
                         integer += 1
                     return nextafter(integer, towards)
-                if 1:
+                if 0:
                     assert coord_to_cell(53.0) == 52
                     assert coord_to_cell(53.0000000001) == 53
                     assert coord_to_cell(53.9999999999) == 53
@@ -464,7 +464,7 @@ class GridCollider(Generic[T]):
                     if (coord < 0) and fractional:
                         integer -= 1
                     return nextafter(integer, towards)
-                if 1:
+                if 0:
                     assert coord_to_cell(53.0) == 53
                     assert coord_to_cell(53.0000000001) == 53
                     assert coord_to_cell(53.9999999999) == 53
@@ -492,7 +492,7 @@ class GridCollider(Generic[T]):
             while True:
                 next_axis_pos = first_value_in_next_cell(axis_pos)
                 # print(f"      {attr!r} -- {axis_pos=} {next_axis_pos=} {next_cell=} {coord_to_cell(next_axis_pos)=}")
-                assert coord_to_cell(next_axis_pos) == next_cell
+                # assert coord_to_cell(next_axis_pos) == next_cell
 
                 tries_remaining = 10
                 while True:
@@ -506,7 +506,7 @@ class GridCollider(Generic[T]):
                     t = (next_axis_pos - start) / scalar_delta
                     # make sure it's properly reversible
                     axis_pos_at_time_t = start + (scalar_delta * t)
-                    assert abs(axis_pos_at_time_t - next_axis_pos) < 0.000001
+                    # assert abs(axis_pos_at_time_t - next_axis_pos) < 0.000001
 
                     # print(f"      {attr!r} {axis_pos=} {next_axis_pos=} {t=} {axis_pos_at_time_t=}")
                     if t > 1:
@@ -578,7 +578,7 @@ class GridCollider(Generic[T]):
             if bool(x) and bool(y):
                 if x[0] == y[0]:
                     # combine
-                    assert x[1] == y[1]
+                    # assert x[1] == y[1]
                     all_hits = tuple(set(x[2]) | set(y[2]))
                     value = (x[0], x[1], all_hits)
                     x = None
@@ -593,7 +593,7 @@ class GridCollider(Generic[T]):
                 value = x
                 x = None
             else:
-                assert y
+                # assert y
                 value = y
                 y = None
 
