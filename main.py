@@ -1129,7 +1129,7 @@ class Player:
 
     MAX_HORIZONTAL_SPEED = 0.4
 
-    GROUND_FRICTION_FACTOR = 0.80 # delta.x multiplied by this every tick
+    GROUND_FRICTION_FACTOR = 0.70 # delta.x multiplied by this every tick
 
     WALL_FRICTION_MAX_SPEED = TERMINAL_VELOCITY / 5
 
