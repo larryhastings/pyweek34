@@ -3,6 +3,7 @@
 from abc import abstractmethod
 import bisect
 import builtins
+from dataclasses import dataclass
 from itertools import cycle
 import collision
 import math
@@ -12,7 +13,7 @@ from pytiled_parser import parse_map
 import random
 import sys
 import time
-from typing import Optional
+from typing import Any, Callable, Optional
 import wasabi2d as w2d
 from wasabi2d.clock import Clock
 import wasabi2d.loop
@@ -602,8 +603,38 @@ main_clock = Clock()
 game_clock = main_clock.create_sub_clock()
 
 
+@dataclass
+class HUDBound:
+    slot: int
+    template: Callable[[Any], str]
+
+    def __set_name__(self, owner, name):
+        self.attr = '_' + name
+
+    def __get__(self, inst, cls=None):
+        return getattr(inst, self.attr)
+
+    def __set__(self, inst, v):
+        setattr(inst, self.attr, v)
+        try:
+            text = self.template(inst)
+            hud = inst.hud
+        except AttributeError:
+            # Don't worry about bootstrapping order
+            return
+        hud[self.slot].text = text
+
+
 class Level:
     nursery: w2d.Nursery
+
+    GEM_TEMPLATE = lambda self: f"{self.total_gems - self._gems} / {self._total_gems}"
+    gems = HUDBound(1, GEM_TEMPLATE)
+    total_gems = HUDBound(1, GEM_TEMPLATE)
+
+    MONSTER_TEMPLATE = lambda self: f"{self._monsters} monsters remaining" if self._monsters else "All clear"
+    monsters = HUDBound(2, MONSTER_TEMPLATE)
+    total_monsters = HUDBound(2, MONSTER_TEMPLATE)
 
     def __init__(self, name):
         self.name = name
@@ -622,16 +653,39 @@ class Level:
         self.current_checkpoint = None
         self.physical_objects = {}
 
+    def mkhud(self):
+        topleft = scene.dims * -0.5
+        topright = topleft + vec2(scene.width, 0)
+        self.hud = w2d.Group([
+            hud.add_sprite(
+                "gem",
+                pos=topleft + vec2(29, 20)
+            ),
+            hud.add_label(
+                self.GEM_TEMPLATE(),
+                fontsize=18,
+                pos=topleft + vec2(47, 27),
+            ),
+            hud.add_label(
+                self.MONSTER_TEMPLATE(),
+                pos=topright + vec2(-20, 27),
+                fontsize=18,
+                align="right"
+            )
+        ])
+        return self.hud
+
     async def run(self):
         global player
         objects = self.load_map(self.name)
         self.total_gems = self.gems
         self.total_monsters = self.monsters
         # print(f"level has {self.gems} gems to collect.")
-        async with w2d.Nursery() as self.nursery:
-            for obj in objects:
-                self.nursery.do(obj.run())
-            self.nursery.do(run_lives())
+        with self.mkhud():
+            async with w2d.Nursery() as self.nursery:
+                for obj in objects:
+                    self.nursery.do(obj.run())
+                self.nursery.do(run_lives())
 
     def on_level_completion_changed(self):
         # print(f"level now has {self.gems} gems to collect.")
@@ -1673,26 +1727,13 @@ class Player:
 async def run_lives():
     controller = Controller()
 
-    start = scene.dims * -0.5 + vec2(20, 20)
-    lives = [
-        hud.add_sprite(
-            "pixel_platformer/tiles/tile_0145",
-            pos=start + vec2(20 * i, 0)
-        ) for i in range(4)
-    ]
-    try:
-        while lives:
-            lives.pop().delete()
+    while True:
+        cp = level.current_checkpoint
+        cp.restore()
 
-            cp = level.current_checkpoint
-            cp.restore()
-
-            global player
-            player = Player(cp.pos, controller)
-            await player.run()
-    finally:
-        for l in lives:
-            l.delete()
+        global player
+        player = Player(cp.pos, controller)
+        await player.run()
 
 
 async def drive_main_clock():
