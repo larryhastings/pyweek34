@@ -655,6 +655,8 @@ class Level:
     total_gems = HUDBound(1, GEM_TEMPLATE)
 
     def MONSTER_TEMPLATE(self):
+        if not self._total_monsters:
+            return ""
         if self._monsters == 1:
             return f"1 monster remaining"
         elif self._monsters:
