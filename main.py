@@ -475,6 +475,9 @@ class Switch(Block):
 
         level.color_to_switches[color].append(self)
 
+    def delete(self):
+        self.sprite.delete()
+
     def __repr__(self):
         current = "on" if self.sprite[0].image == self.on_image else "off"
         return f"<Switch {self.__repr_pos__()} {self.color} {current}>"
@@ -527,6 +530,17 @@ class Springboard(Block):
 
 class JumpRestore(Block):
     solid = False
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.light = lights.add_sprite(
+            'point_light',
+            pos=self.pos * TILE_SIZE,
+            color=(0.6, 1.0, 0.6, 0.3),
+        )
+
+    def delete(self):
+        self.light.delete()
+
     def on_touched(self, player, delta):
         assert player
         player.jumps_remaining = 2
@@ -546,6 +560,11 @@ class Signpost(Block):
 
         level.collision_grid.add(self)
         self.label = None
+
+    def delete(self):
+        self.sprite.delete()
+        if self.label:
+            self.label.delete()
 
     def on_touched(self, player, delta):
         if not self.label:
