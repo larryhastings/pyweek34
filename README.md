@@ -44,7 +44,8 @@ If that doesn't work, try this command:
     % source .venv/bin/activate
 
 Next you'll need to pull in the source for `wasabi2d`.
-We're using a published but unreleased-as-a-package version of wasabi2d, revision 6e855f65f9b4326e8ec6647caf7d4990c43a618e.
+We're using a published but unreleased-as-a-package version of wasabi2d, revision
+74b0b92160ea2ead1f1bf0abd106f2e72a1283e9.
 
     % git submodule init vendor/wasabi2d
     % git submodule update
