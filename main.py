@@ -1008,6 +1008,7 @@ class Player:
         scene.camera.pos = self.shape.pos
 
         self.controller = controller
+        self.state = self.state_falling
         self.jumps_remaining = 2
         self.jump_requested = False
         # this is the vertical impulse value, e.g. self.JUMP
@@ -1177,7 +1178,7 @@ class Player:
         falling_gravity = self.FALLING_GRAVITY * dt
 
         self.state = self.state_on_ground
-        assert self.jumps_remaining == 2
+        # assert self.jumps_remaining == 2
 
         jumped = False
         jump_buffered_until = -1
