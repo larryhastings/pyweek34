@@ -90,6 +90,32 @@ for color, layer in color_to_layer.items():
 
 
 class Block:
+    def __init__(self, image, x, y=None):
+        if (y is None) and isinstance(x, vec2):
+            position = x
+        else:
+            position = vec2(x, y)
+        self.pos = position
+        self.solid = True
+
+        # we can have invisible blocks!
+        # we use those for the offscreen barrier.
+        if image:
+            tile_map = color_tile_maps[gray_layer]
+            tile_map[x, y] = image
+
+        level.collision_grid.add(self)
+
+    def __repr_pos__(self):
+        return f"({int(self.pos.x):3}, {int(self.pos.y):3})"
+
+    def __repr__(self):
+        return f"<Block {self.__repr_pos__()}>"
+
+    def on_touched(self):
+        pass
+
+class ColoredBlock(Block):
     def __init__(self, color, image, x, y=None):
         if (y is None) and isinstance(x, vec2):
             position = x
@@ -99,6 +125,7 @@ class Block:
         # grid[int(position.x)][int(position.y)].append(self)
         assert color in color_tile_maps, f"{color=} not in {color_tile_maps=}"
         self.color = color
+        self.solid = True
 
         # self.shape = scene.layers[0].add_rect(cell_size, cell_size, fill=True, color='red', pos=(position.x*cell_size, position.y*cell_size))
         if image is not None:
@@ -110,17 +137,11 @@ class Block:
                 tile_map[x, y] = f"{color}_off_20"
 
         level.collision_grid.add(self)
-        self.solid = True
         level.color_to_shapes[color].append(self)
 
-    def __repr_pos__(self):
-        return f"({int(self.pos.x):3}, {int(self.pos.y):3})"
-
     def __repr__(self):
-        return f"<Block {self.__repr_pos__()} {self.color}>"
+        return f"<ColoredBlock {self.__repr_pos__()} {self.color}>"
 
-    def on_touched(self):
-        pass
 
 class Death(Block):
     solid = True
@@ -227,7 +248,7 @@ class Collectable(Block):
             await w2d.animate(
                 sprite,
                 pos=sprite.pos + vec2(0, -40),
-                scale=1.5,
+                scale=1.8,
                 angle=-0.2,
             )
 
@@ -298,25 +319,6 @@ def background_block(image, x, y=None):
     tile_map[x, y] = image
 
 
-actions = {
-    "move_up",
-    "move_down",
-    "move_left",
-    "move_right",
-
-    "jump,"
-    "shoot",
-    "pause",
-    "quit",
-
-    "toggle_red",
-    "toggle_orange",
-    "toggle_yellow",
-    "toggle_green",
-    "toggle_blue",
-    "toggle_purple",
-    }
-
 
 cell_size = TILE_SIZE
 
@@ -382,15 +384,15 @@ class Level:
         y = int(upper_left.y)
         for x in range(int(upper_left.x), int(lower_right.x) + 1):
             # blocks add themselves to the collision grid
-            b = Block("gray", None, x, y)
+            b = Block(None, x, y)
             # print("added top barrier", b)
 
         x_left = int(upper_left.x)
         x_right = int(lower_right.x)
         for y in range(int(upper_left.y + 1), int(lower_right.y)):
-            b = Block("gray", None, x_left, y)
+            b = Block(None, x_left, y)
             # print("added left barrier", b)
-            b = Block("gray", None, x_right, y)
+            b = Block(None, x_right, y)
             # print("added right barrier", b)
 
         y = int(lower_right.y)
@@ -460,7 +462,7 @@ class Level:
                     elif object_type == "switch":
                         block = Switch(color, x, y)
                     else:
-                        block = Block(color, image, x, y)
+                        block = ColoredBlock(color, image, x, y)
                     if hasattr(block, 'run'):
                         objects.append(block)
 
@@ -745,6 +747,7 @@ class Player:
             print(f"[{tick:05} start] {self.state:12} pos=({self.pos.x:+1.5f}, {self.pos.y:+1.5f}) delta=({self.v.x:+1.5f}, {self.v.y:+1.5f})")
 
             if 1:
+                # this is just a sanity check, it's not needed for the game to work.
                 hits = level.collision_grid.collide_pawn(self)
                 if hits:
                     solid_hits = [tile for tile in hits if tile.solid and level.color_state[tile.color]]
@@ -839,18 +842,24 @@ class Player:
                     delta_remaining,
                 ):
                     solid_tiles = []
-                    passthrough_tiles = set()
+                    passthrough_tiles = []
 
                     for tile in hit:
                         assert hasattr(tile, 'solid')
-                        if tile.solid:
-                            if level.color_state[tile.color]:
-                                solid_tiles.append(tile)
+                        # if it's a solid block, and
+                        #    it's not a colored block,
+                        #    OR it's a colored block but its color is on,
+                        if ( tile.solid and
+                            ( (not isinstance(tile, ColoredBlock))
+                                or level.color_state[tile.color] ) ):
+                            l = solid_tiles
                         else:
-                            passthrough_tiles.add(tile)
+                            l = passthrough_tiles
+                        l.append(tile)
 
                     if not solid_tiles:
                         print(f"  collision with only passthrough tiles at {t=}")
+                        passthrough_tiles = set(passthrough_tiles)
                         for tile in passthrough_tiles - touching:
                             tile.on_touched()
                         new_touching.update(passthrough_tiles)
