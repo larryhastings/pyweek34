@@ -747,6 +747,8 @@ class Level:
 
         empty_dict = {}
 
+        departure_point = None
+
         objects = []
         for layer in level_map.layers:
             block_type_override = None
@@ -807,6 +809,7 @@ class Level:
                         block = Spikes(image, x, y)
                     elif object_type == "departure point":
                         block = DeparturePoint(image, x, y)
+                        departure_point = block
                     elif object_type == "monster":
                         block = Monster(image, x, y)
                     elif object_type == "signpost":
@@ -818,6 +821,7 @@ class Level:
                         objects.append(block)
 
         assert self.current_checkpoint, "no initial checkpoint set in map!"
+        assert departure_point, "no departure point set in map!"
         self.on_level_completion_changed()
         return objects
 
