@@ -5,11 +5,16 @@ It's time to play GAME NAME HERE!
 Install
 -------
 
-Create your virtual env and install the dependencies:
+Create a virtual env in the game directory:
 
-    pip install -e requirements.txt
+    % python3 -m venv .venv
+    % source .venv/bin/activate
 
-We're using a published but unreleased-as-a-package version of wasabi2d, revision 6e855f65f9b4326e8ec6647caf7d4990c43a618e.
+and install the dependencies:
+
+    % pip3 install -e requirements.txt
+
+We're using a published but unreleased-as-a-package version of wasabi2d, revision 6e855f65f9b4326e8ec6647caf7d4990c43a618e.  (It'll get installed from requirements.txt.)
 
 
 Goal
