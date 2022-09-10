@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import bisect
 import builtins
 import math
@@ -114,7 +115,7 @@ class Block:
     def __repr__(self):
         return f"<{self.__class__.__name__} {self.__repr_pos__()}>"
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         pass
 
 class ColoredBlock(Block):
@@ -144,6 +145,32 @@ class ColoredBlock(Block):
     def __repr__(self):
         return f"<ColoredBlock {self.__repr_pos__()} {self.color}>"
 
+class SemisolidBlock(Block):
+    solid = SEMISOLID
+
+    @abstractmethod
+    def is_solid(self, pawn, delta):
+        raise RuntimeError("SemisolidBlock.is_solid called")
+
+
+class Spikes(SemisolidBlock):
+    def on_touched(self, player, delta):
+        if self.is_solid(player, delta):
+            player.nursery.cancel()
+
+    def is_solid(self, pawn, delta):
+        # solid if the character is falling,
+        # permeable if the character is rising or only moving laterally.
+        return bool(delta.y >= 0)
+
+
+class JumpThroughBlock(SemisolidBlock):
+
+    def is_solid(self, pawn, delta):
+        # solid if the character is falling,
+        # permeable if the character is rising or only moving laterally.
+        return bool(delta.y > 0)
+
 
 class Death(Block):
     solid = True
@@ -156,7 +183,7 @@ class Death(Block):
         self.pos = position
         level.collision_grid.add(self)
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         player.nursery.cancel()
 
 
@@ -180,7 +207,7 @@ class Monster(Block):
             level.monsters -= 1
             level.on_level_completion_changed()
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         if not self.dead:
             player.nursery.cancel()
 
@@ -207,9 +234,9 @@ class Checkpoint(Block):
         self.color_state = None
 
         if initial:
-            self.on_touched()
+            self.on_touched(None, None)
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         changed_current_checkpoint = level.current_checkpoint != self
         if changed_current_checkpoint:
             if level.current_checkpoint:
@@ -259,7 +286,7 @@ class DeparturePoint(Block):
         level.level_complete_callbacks.append(self.on_level_complete)
 
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         if self.activated:
             print("LEVEL COMPLETE")
             pass
@@ -285,7 +312,7 @@ class Collectable(Block):
 
         level.collision_grid.add(self)
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         self.nursery.cancel()
 
     async def run(self):
@@ -341,7 +368,7 @@ class Gem(Collectable):
         current = "collected" if self.collected == self else "uncollected"
         return f"<Collectable {self.__repr_pos__()} {current}>"
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         if not self.collected:
             super().on_touched()
             level.gems -= 1
@@ -356,7 +383,7 @@ class ColorActuator(Collectable):
         self.color = color
         assert color in color_to_layer
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         super().on_touched()
         level.have_color_actuator[self.color] = True
 
@@ -398,7 +425,7 @@ class Switch(Block):
         current = "on" if self.sprite[0].image == self.on_image else "off"
         return f"<Switch {self.__repr_pos__()} {self.color} {current}>"
 
-    def on_touched(self):
+    def on_touched(self, player, delta):
         new_state = level.toggle_color(self.color)
 
     def set_state(self, on):
@@ -413,7 +440,7 @@ class Switch(Block):
 
 class JumpRestore(Block):
     solid = False
-    def on_touched(self):
+    def on_touched(self, player, delta):
         assert player
         player.jumps_remaining = 2
 
@@ -591,8 +618,12 @@ class Level:
                         block = ColorActuator(color, image, x, y)
                     elif object_type == "switch":
                         block = Switch(color, x, y)
+                    elif object_type == "jump through":
+                        block = JumpThroughBlock(image, x, y)
                     elif object_type == "jump restore":
                         block = JumpRestore(image, x, y)
+                    elif object_type == "spikes":
+                        block = Spikes(image, x, y)
                     elif object_type == "departure point":
                         block = DeparturePoint(image, x, y)
                     elif object_type == "monster":
@@ -672,7 +703,7 @@ async def shoot(player: 'Player', direction: vec2):
                     match obj:
                         case Switch():
                             if obj not in touching:
-                                obj.on_touched()
+                                obj.on_touched(None, None)
                             new_touching.add(obj)
                             ns.cancel()
 
@@ -918,7 +949,7 @@ class Player:
                     if solid_hits:
                         print = builtins.print
                         print(f"shouldn't be touching anything solid right now!")
-                        print(f"pawn {self.pos=} {self.v=}")
+                        print(f"player {self.pos=} {self.v=}")
                         print("tiles:")
                         for tile in solid_hits:
                             print(f"  {tile} {tile.pos}")
@@ -1013,7 +1044,12 @@ class Player:
                         # if it's a solid block, and
                         #    it's not a colored block,
                         #    OR it's a colored block but its color is on,
-                        if ( tile.solid and
+                        if tile.solid == SEMISOLID:
+                            if (tile not in touching) and tile.is_solid(player, delta):
+                                l = solid_tiles
+                            else:
+                                l = passthrough_tiles
+                        elif ( tile.solid and
                             ( (not isinstance(tile, ColoredBlock))
                                 or level.color_state[tile.color] ) ):
                             l = solid_tiles
@@ -1033,7 +1069,7 @@ class Player:
                             passthrough_tiles = set(passthrough_tiles)
                             for tile in passthrough_tiles - touching:
                                 print(f"    {tile}")
-                                tile.on_touched()
+                                tile.on_touched(player, delta)
                             new_touching.update(passthrough_tiles)
                         continue
 
@@ -1099,7 +1135,7 @@ class Player:
                     hit_corner = hit_x = hit_y = False
 
                     for tile in solid_tiles:
-                        tile.on_touched()
+                        tile.on_touched(player, delta_remaining)
 
                         # Special case!
                         #

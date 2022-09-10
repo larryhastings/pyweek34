@@ -209,6 +209,9 @@
   <image width="18" height="18" source="tiles/tile_0067.png"/>
  </tile>
  <tile id="80">
+  <properties>
+   <property name="object" value="spikes"/>
+  </properties>
   <image width="18" height="18" source="tiles/tile_0068.png"/>
  </tile>
  <tile id="81">

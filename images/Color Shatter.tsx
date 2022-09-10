@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="20" columns="0">
+<tileset version="1.9" tiledversion="1.9.1" name="Color Shatter" tilewidth="18" tileheight="18" tilecount="23" columns="0">
  <grid orientation="orthogonal" width="1" height="1"/>
  <properties>
   <property name="object" value="monster"/>
@@ -153,5 +153,23 @@
    <property name="object" value="monster"/>
   </properties>
   <image width="18" height="18" source="monster.png"/>
+ </tile>
+ <tile id="20">
+  <properties>
+   <property name="object" value="jump through"/>
+  </properties>
+  <image width="18" height="18" source="jump_through_left.png"/>
+ </tile>
+ <tile id="21">
+  <properties>
+   <property name="object" value="jump through"/>
+  </properties>
+  <image width="18" height="18" source="jump_through_middle.png"/>
+ </tile>
+ <tile id="22">
+  <properties>
+   <property name="object" value="jump through"/>
+  </properties>
+  <image width="18" height="18" source="jump_through_right.png"/>
  </tile>
 </tileset>
