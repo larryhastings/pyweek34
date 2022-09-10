@@ -1,0 +1,12 @@
+next level = you_win
+messages = {
+        1 = """
+            A color actuator!  These are really handy!
+
+            Pick that red actuator up, and you can toggle
+            red just by pressing the 1 key on your keyboard!
+
+            Good thing you brought that keyboard with you!
+            """
+
+}
