@@ -273,7 +273,7 @@ unique part of the level's filename.  All the level files are
 
 So, to jump straight to "Go Hunting", you'd run
 
-   % python3 main.py go_hunting
+    % python3 main.py go_hunting
 
 
 Development
