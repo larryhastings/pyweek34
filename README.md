@@ -56,7 +56,7 @@ Now you can install the game's dependencies:
 
 This will install the vendored copy of wasabi2d too.  Now the game should be ready to run:
 
-   % python3 main.py
+    % python3 main.py
 
 Phew!
 
@@ -243,7 +243,28 @@ Number keys toggle a color, if you've picked up the correct color actuator:
 **6** to toggle purple.
 
 
+Secret Command-Line Flags
+-------------------------
+
+If you want to skip the tutorial and just play the challenge levels,
+run the game with the `-c` or `--challenge` flags:
+
+    % python3 main.py -c
+
+And if you want to jump to a particular level, just specify the
+unique part of the level's filename.  All the level files are
+
+    data/level_*.tmx
+
+So, to jump straight to "Go Hunting", you'd run
+
+   % python3 main.py go_hunting
+
+
 Development
 -----------
 
-We're using Tiled 1.9.1.
+In case you want to make your own levels, we're using Tiled 1.9.1.
+There are three tilesets.  We created "terrain maps" for the seven
+colors of platforms but they don't work super-well--Tiled wants
+way more tiles than just nine slice scaling.
