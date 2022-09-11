@@ -47,16 +47,17 @@ If that doesn't work, try this command:
 
     % source .venv/bin/activate
 
-Next you'll need to pull in the source for `wasabi2d`.
+Next, if you cloned our GitHub repo, you'll need to pull in the source for `wasabi2d`.
 We're using a published but unreleased-as-a-package version of wasabi2d, revision
-18bba079e38d0c39ca55e1f9126840a8ad933328.
+18bba079e38d0c39ca55e1f9126840a8ad933328.  If you got the game as the PyWeek `.zip`
+file, you can skip this step.
 
     % git submodule init vendor/wasabi2d
     % git submodule update
 
 Now you can install the game's dependencies:
 
-    % pip3 install -e requirements.txt
+    % pip3 install -r requirements.txt
 
 This will install the vendored copy of wasabi2d too.  Now the game should be ready to run:
 
@@ -256,6 +257,7 @@ Number keys toggle a color, if you've picked up the correct color actuator:
 
 **6** to toggle purple.
 
+**Ctrl-Q** to quit at any time.
 
 Secret Command-Line Flags
 -------------------------
