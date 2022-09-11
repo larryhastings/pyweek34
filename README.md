@@ -33,14 +33,17 @@ How To Play
 -----------
 
 Huepocalypse is written in Python 3.  We used Python 3.10 during development,
-though it's possible other versions may work fine.
+so we'll assume you're using that version.
+(Though it's possible other versions work fine.)
 
-* Use `python -m venv venv` to create a venv.
+* Use Python to create a virtual environment called "venv".  On Mac/Linux,
+  run `python3.10 -m venv venv`.  On Windows, run "py -3 -m venv venv"
 * Activate it: `source venv/bin/activate` on Mac/Linux and
   `venv/Scripts/activate.bat` on Windows.
 * Run `pip install -r requirements.txt` in a virtualenv/venv or other
   environment of your choice.
-* Run `main.py` to play!
+* Run `main.py` to play!  Run "python main.py" on Mac/Linux, and
+  "py -3 main.py" on Windows.
 
 If you exit this venv, or attempt to run the game from a different shell,
 you'll need to "activate" the venv again in that instance of the shell.
