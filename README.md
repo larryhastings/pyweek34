@@ -1,6 +1,8 @@
 Dr. Farb's Huepocalypse
 =======================
 
+![# Screenshot](/images/screenshot.png)
+
 Overview
 --------
 
@@ -30,6 +32,9 @@ and Dan Pope in September 2022 for the
 
 How To Install And Run
 ----------------------
+
+Huepocalypse is written in Python 3.  We used Python 3.10 during development,
+though it's possible other versions may work fine.
 
 You need to run the game from your favorite command shell, using a Python "virtual env" or "venv".  First, create a venv in the game directory:
 
@@ -66,19 +71,24 @@ If you forget to activate, the game will complain with a
 
     ModuleNotFoundError: No module named 'wasabigeom'
 
+error.
 
 Goal
 ----
 
-Get through every level.  Every goal has some objectives:
+Huepocalypse is a platformer game.  You control a scientist named Dr. Hugh Farb.
+
+Your goal is to finish every level.  Every goal has some objectives:
 
 * You must collect all the floating gems.  Just touch the floating gem to collect it!  Some levels may not have any floating gems.
 
 * You must kill all the monsters.  You must shoot a monster to kill it.  Be careful, monsters will kill you!  Some levels may not have any monsters.
 
 Once you've collected all the floating gems and killed all the monsters, you're ready for
-departure--but you have to get to the departure point.  This is a flat object that pops up
-a little bit when it's ready to send you to the next level.
+departure--but you have to get to the departure point.  This is a little door that
+opens when it's ready to send you to the next level.
+
+You have infinite lives.  So, you've got that going for you.
 
 Platform mechanics
 ------------------
@@ -148,17 +158,20 @@ You'll see the following sorts of objects and terrain in levels:
 * *Platforms!*  They're all over the place.  Not sure how they stay
   up like that.
 
-* *Pass-through platforms!*  These platforms are thinner than normal.
+* *Pass-through platforms!*  These platforms are thinner than normal
+  and a little see-through.
   You can jump up through them from below!  Maybe it's old fashioned--
   I think this was first popularized nearly forty years ago--but
   sometimes the old ways are the best ways.
 
-* *Color switches!*  These turn a color on or off.  You can toggle
-  a color's state by touching--or shooting--one of its switches.
+* *Color switches!*  These are little colored pedestals that can
+  turn a color on or off.  You activate a color switch by
+  touching it--or shooting it!
 
 * *Colored platforms!*  These are platforms that disappear when
   you turn a color off--and reappear when you turn the color back
-  on again.
+  on again.  But you better be careful--if you're inside a colored
+  platform when it reappears, you'll die!
 
 * *Checkpoints!*  These little mushroom guys save your current
   your current location.  If you die--egad!--you'll reappear at
@@ -173,13 +186,14 @@ You'll see the following sorts of objects and terrain in levels:
   and you'll get *both* your jumps back!  Did someone say octuple-jump?
   I swear I heard someone say octuple-jump.
 
-* *Springboards!*  Just touch one of these, and you'll go shooting
-  up into the air like a firework!  Luckily for you, you don't also
-  do the explody bit at the end.  Or, at least, I don't think so.
+* *Springboards!*  Just touch one of these little plungers, and you'll
+  go shooting up into the air like a firework!  Luckily for you,
+  you don't also do the explody bit at the end.  Or, at least,
+  I don't think so.
 
 * *Signposts!*  Just walk by one of these signs to read it.
   It won't even slow you down!  But maybe you should read it
-  anyway, it might have something interesting to say.
+  anyway.  It just might have something interesting to say!
 
 And there are even sometims things for you to pick up, like:
 
@@ -188,9 +202,9 @@ And there are even sometims things for you to pick up, like:
   to pick up all of them before you can leave the level.  Just
   run up and touch one to collect it!  You might need to jump a little.
 
-* *Color actuators!*  These are colored tubes that give you the ability
-  to toggle a color whenever you want!  Only lasts through the end
-  of the level.
+* *Color actuators!*  These look like colored tubes.  They give you
+  the ability to toggle a color whenever you want!  Only lasts
+  through the end of the level.
 
 * A shiny new *Whitegun!*  This is a gun that shoots the color white.
   Use it to whitewash Monsters out of existence.  You can also shoot
@@ -200,7 +214,8 @@ And there are even sometims things for you to pick up, like:
 
 But it's not all good news.  You'll also see:
 
-* *Monsters!*  You have to kill all of them before you can leave--and
+* *Monsters!*  Little brown frowning circles--with red eyes!
+  You have to kill all of them before you can leave--and
   the only way is by shooting them. But be careful, if you touch one
   it'll kill you!
 
@@ -212,8 +227,8 @@ of terrain:
 
 * Every level has one gen-u-ine patented *departure point!*
   Once you've killed all the monsters and picked up all the gems,
-  the departure point will become active!  Just touch it to be
-  whisked away, off to your next adventure.
+  the departure point will become active!  Just enter the little
+  door to be whisked away, off to your next adventure.
 
 
 
