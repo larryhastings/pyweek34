@@ -1,3 +1,4 @@
+name = Tutorial 6: Jump Restorers And Gems
 next level = tutorial_07
 messages = {
         1 = """
@@ -5,6 +6,9 @@ messages = {
             back online.  These give you back your
             double-jump in mid-air!  Scaling this wall
             should be no problem.
+
+            Maybe you can avoid those spikes by...
+            going left?
             """
 
         2 = """
