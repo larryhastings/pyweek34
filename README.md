@@ -6,7 +6,7 @@ Dr. Farb's Huepocalypse
 Overview
 --------
 
-Dr. Hugh Farb, you've really done it this time!
+Dr. Hugh Farb, you've *really* done it this time!
 
 Your wavelength dimensional convolver has overloaded...
 breaking *color itself!*  All the color is starting to
@@ -14,13 +14,12 @@ drain out of the world, starting with the lower frequencies.
 I never thought I'd have a use for this word, but it's...
 a ***huepocalypse!***
 
-If you don't fix it soon, the entire planet is going to
-turn red!  We think all color might drain out of the entire
-solar system--but that's not such a big concern, as we'd
-certainly all be dead by then.
+If you don't fix it soon, the entire planet will turn red!
+We think all color might drain out of the entire solar
+system--not that we'd notice, as we'll all be dead by then.
 
-You're going to have to put on that silly white color
-stabilization suit and run out and fix it!  Good thing
+You're going to have to put on that silly silver color
+stabilization suit and run out and fix everything!  Good thing
 you're such a gym rat--all that cardio and parkour is
 going to come in handy!
 
@@ -50,7 +49,7 @@ If that doesn't work, try this command:
 
 Next you'll need to pull in the source for `wasabi2d`.
 We're using a published but unreleased-as-a-package version of wasabi2d, revision
-74b0b92160ea2ead1f1bf0abd106f2e72a1283e9.
+18bba079e38d0c39ca55e1f9126840a8ad933328.
 
     % git submodule init vendor/wasabi2d
     % git submodule update
@@ -113,7 +112,7 @@ Movement features of your character:
 Color
 -----
 
-Color plays a big role in the huepocalypse.  There are six colors:
+Color plays a big role in the Huepocalypse.  There are six colors:
 
 * red
 * orange
